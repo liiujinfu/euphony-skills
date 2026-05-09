@@ -14,7 +14,8 @@ The primary script is `scripts/codex-euphony.mjs` and works on macOS, Linux, and
 `scripts/codex-euphony.sh` is only a Unix compatibility wrapper around the Node script.
 
 If the Euphony cache is deleted, the script recreates it on the next command that needs Euphony.
-If `node_modules` is deleted, the script reruns `corepack pnpm install`.
+If `node_modules` is deleted, the script reruns `pnpm install`.
+The script prefers a directly installed `pnpm`; if only Corepack is available, it runs `corepack pnpm` with `COREPACK_INTEGRITY_KEYS=0` for that subprocess to avoid known Corepack pnpm signature bootstrap failures during first startup.
 
 ## Workflow
 

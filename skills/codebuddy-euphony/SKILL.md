@@ -13,6 +13,7 @@ Euphony can read Codex-session JSONL, so this skill converts CodeBuddy events to
 The skill manages Euphony as a disposable runtime checkout under `${CODEBUDDY_HOME:-$HOME/.codebuddy}/cache/euphony` by default.
 If that cache is deleted, it is recreated on the next command that needs Euphony.
 The script is a Node.js 18+ executable and works on macOS, Linux, and Windows.
+The script prefers a directly installed `pnpm`; if only Corepack is available, it runs `corepack pnpm` with `COREPACK_INTEGRITY_KEYS=0` for that subprocess to avoid known Corepack pnpm signature bootstrap failures during first startup.
 
 ## Workflow
 

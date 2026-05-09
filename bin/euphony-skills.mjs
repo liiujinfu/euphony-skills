@@ -54,18 +54,12 @@ function commandExists(command) {
     if (isWindows) {
       execFileSync('where', [command], { stdio: 'ignore', shell: true });
     } else {
-      execFileSync('/bin/sh', ['-lc', `command -v ${shellQuote(command)} >/dev/null 2>&1`], {
-        stdio: 'ignore'
-      });
+      execFileSync('which', [command], { stdio: 'ignore' });
     }
     return true;
   } catch {
     return false;
   }
-}
-
-function shellQuote(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
 }
 
 function parseArgs(argv) {
@@ -185,9 +179,10 @@ function statInstall(targetKey) {
 
 function doctor() {
   console.log(`Node: ${process.version}`);
-  for (const command of ['git', 'corepack']) {
+  for (const command of ['git', 'pnpm', 'corepack']) {
     console.log(`${command}: ${commandExists(command) ? 'found' : 'missing'}`);
   }
+  console.log(`package runner: ${commandExists('pnpm') ? 'pnpm' : commandExists('corepack') ? 'corepack pnpm' : 'missing'}`);
   for (const key of Object.keys(targets)) {
     const status = statInstall(key);
     console.log(`\n${status.target.label}`);

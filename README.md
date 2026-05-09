@@ -15,10 +15,11 @@ Each skill directory is self-contained, so it can still be installed by path. Th
 
 - Node.js 18 or newer.
 - `git`, used when a skill needs to clone the Euphony runtime checkout.
-- `corepack`, used to run `pnpm install` for Euphony.
+- `pnpm` or `corepack`, used to install and run Euphony.
 - macOS, Linux, or Windows with a local browser opener.
 
 The installer itself does not install Euphony dependencies. The selected skill does that lazily the first time it starts Euphony.
+At runtime the skill prefers an installed `pnpm`; when only Corepack is available, it uses `corepack pnpm` and sets `COREPACK_INTEGRITY_KEYS=0` for that subprocess to avoid known Corepack pnpm signature bootstrap failures.
 
 ## Quick Install
 

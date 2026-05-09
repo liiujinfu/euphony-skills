@@ -15,10 +15,11 @@
 
 - Node.js 18 或更高版本。
 - `git`，skill 首次拉取 Euphony 运行时 checkout 时使用。
-- `corepack`，用于执行 Euphony 的 `pnpm install`。
+- `pnpm` 或 `corepack`，用于安装和运行 Euphony。
 - macOS、Linux 或 Windows，并支持本地浏览器打开命令。
 
 安装器本身不会安装 Euphony 依赖；对应 skill 会在第一次启动 Euphony 时按需安装。
+运行时会优先使用已安装的 `pnpm`；如果只有 Corepack，则使用 `corepack pnpm`，并仅对该子进程设置 `COREPACK_INTEGRITY_KEYS=0`，避开常见的 Corepack pnpm 签名 bootstrap 失败。
 
 ## 快速安装
 

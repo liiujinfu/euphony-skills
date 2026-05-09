@@ -57,16 +57,12 @@ function fail(message) {
   process.exit(1);
 }
 
-function shellQuote(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
-}
-
 function commandExists(command) {
   try {
     if (isWindows) {
       execFileSync('where', [command], { stdio: 'ignore', shell: true });
     } else {
-      execFileSync('/bin/sh', ['-lc', `command -v ${shellQuote(command)} >/dev/null 2>&1`], { stdio: 'ignore' });
+      execFileSync('which', [command], { stdio: 'ignore' });
     }
     return true;
   } catch {
@@ -83,6 +79,47 @@ function run(command, args, options = {}) {
     ...options,
     shell: isWindows && command === 'corepack',
     stdio: options.stdio || 'inherit'
+  });
+}
+
+function packageRunner() {
+  if (commandExists('pnpm')) {
+    return { command: 'pnpm', argsPrefix: [], env: process.env, shell: isWindows };
+  }
+  requireCommand('corepack');
+  return {
+    command: 'corepack',
+    argsPrefix: ['pnpm'],
+    env: {
+      ...process.env,
+      COREPACK_INTEGRITY_KEYS: process.env.COREPACK_INTEGRITY_KEYS || '0'
+    },
+    shell: isWindows
+  };
+}
+
+function runPnpm(args, options = {}) {
+  const runner = packageRunner();
+  if (runner.command === 'corepack' && !process.env.COREPACK_INTEGRITY_KEYS) {
+    console.log('Using Corepack with COREPACK_INTEGRITY_KEYS=0 to avoid known pnpm signature bootstrap failures.');
+  }
+  return execFileSync(runner.command, [...runner.argsPrefix, ...args], {
+    ...options,
+    env: runner.env,
+    shell: runner.shell,
+    stdio: options.stdio || 'inherit'
+  });
+}
+
+function spawnPnpm(args, options = {}) {
+  const runner = packageRunner();
+  return spawn(runner.command, [...runner.argsPrefix, ...args], {
+    ...options,
+    env: {
+      ...runner.env,
+      ...(options.env || {})
+    },
+    shell: runner.shell
   });
 }
 
@@ -116,9 +153,8 @@ function ensureEuphonyDir() {
   if (fs.existsSync(packageJson)) {
     patchEuphonyFrontendLimit();
     if (!fs.existsSync(path.join(euphonyDir, 'node_modules'))) {
-      requireCommand('corepack');
       console.log(`Installing Euphony dependencies in ${euphonyDir}...`);
-      run('corepack', ['pnpm', 'install'], { cwd: euphonyDir });
+      runPnpm(['install'], { cwd: euphonyDir });
     }
     return;
   }
@@ -129,13 +165,12 @@ Remove it or set EUPHONY_DIR to another path.`);
   }
 
   requireCommand('git');
-  requireCommand('corepack');
   fs.mkdirSync(path.dirname(euphonyDir), { recursive: true });
   console.log(`Cloning Euphony into ${euphonyDir}...`);
   run('git', ['clone', euphonyRepo, euphonyDir]);
   patchEuphonyFrontendLimit();
   console.log(`Installing Euphony dependencies in ${euphonyDir}...`);
-  run('corepack', ['pnpm', 'install'], { cwd: euphonyDir });
+  runPnpm(['install'], { cwd: euphonyDir });
 }
 
 function walkJsonlFiles(dir, out = []) {
@@ -267,12 +302,10 @@ function trackedOrAdoptedPid() {
 function startViteBackground() {
   fs.mkdirSync(runDir, { recursive: true });
   const logFd = fs.openSync(logFile, 'a');
-  const child = spawn('corepack', ['pnpm', 'exec', 'vite', '--host', host, '--port', String(port)], {
+  const child = spawnPnpm(['exec', 'vite', '--host', host, '--port', String(port)], {
     cwd: euphonyDir,
     detached: true,
-    shell: isWindows,
     env: {
-      ...process.env,
       VITE_EUPHONY_FRONTEND_ONLY: 'true',
       VITE_EUPHONY_FRONTEND_ONLY_MAX_LINES: maxLines
     },
@@ -310,11 +343,9 @@ Stop the other server or set EUPHONY_PORT to another value.`);
 
 async function startForeground() {
   ensureEuphonyDir();
-  const child = spawn('corepack', ['pnpm', 'exec', 'vite', '--host', host, '--port', String(port)], {
+  const child = spawnPnpm(['exec', 'vite', '--host', host, '--port', String(port)], {
     cwd: euphonyDir,
-    shell: isWindows,
     env: {
-      ...process.env,
       VITE_EUPHONY_FRONTEND_ONLY: 'true',
       VITE_EUPHONY_FRONTEND_ONLY_MAX_LINES: maxLines
     },
