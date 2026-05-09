@@ -16,7 +16,7 @@
 - Node.js 18 或更高版本。
 - `git`，skill 首次拉取 Euphony 运行时 checkout 时使用。
 - `corepack`，用于执行 Euphony 的 `pnpm install`。
-- macOS、Linux，或其他支持本地浏览器打开命令的环境。
+- macOS、Linux 或 Windows，并支持本地浏览器打开命令。
 
 安装器本身不会安装 Euphony 依赖；对应 skill 会在第一次启动 Euphony 时按需安装。
 
@@ -129,9 +129,9 @@ Open this CodeBuddy conversation in Euphony.
 Codex：
 
 ```bash
-~/.codex/skills/codex-euphony/scripts/codex-euphony.sh open
-~/.codex/skills/codex-euphony/scripts/codex-euphony.sh status
-~/.codex/skills/codex-euphony/scripts/codex-euphony.sh stop
+node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs open
+node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs status
+node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs stop
 ```
 
 CodeBuddy：
@@ -153,12 +153,21 @@ CodeBuddy：
 - 如果缓存被删除，下一次需要 Euphony 时会自动重建。
 - 本地 Euphony 服务绑定到 `127.0.0.1`。
 - 默认端口是 `3000`。
+- Codex staging 在 macOS/Linux 默认使用软链接，在 Windows 默认复制文件。设置 `EUPHONY_STAGE_MODE=copy` 可以在所有平台强制使用快照复制。
+- 后台服务通过 Euphony cache 下的 pid 文件跟踪，所以 `stop` 只会停止同一个 skill 脚本启动的服务。
 
 如果 `3000` 端口已被占用，可以换端口：
 
 ```bash
-EUPHONY_PORT=3001 ~/.codex/skills/codex-euphony/scripts/codex-euphony.sh open
+EUPHONY_PORT=3001 node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs open
 EUPHONY_PORT=3001 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open
+```
+
+Windows PowerShell 示例：
+
+```powershell
+$env:EUPHONY_PORT = "3001"
+node "$env:USERPROFILE\.codex\skills\codex-euphony\scripts\codex-euphony.mjs" open
 ```
 
 ## 隐私
@@ -192,7 +201,7 @@ npm_config_cache=/tmp/euphony-skills-npm-cache npx @jefferylau/euphony-skills do
 如果有多个 Euphony 服务在跑，停止对应服务或换端口：
 
 ```bash
-~/.codex/skills/codex-euphony/scripts/codex-euphony.sh stop
+node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs stop
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs stop
 ```
 

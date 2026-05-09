@@ -16,7 +16,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "check": "node --check bin/euphony-skills.mjs && node --check skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs",
+    "check": "node --check bin/euphony-skills.mjs && node --check skills/codex-euphony/scripts/codex-euphony.mjs && node --check skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs",
     "doctor": "node bin/euphony-skills.mjs doctor"
   },
   "engines": {

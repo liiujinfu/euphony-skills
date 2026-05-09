@@ -5,6 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
+const isWindows = process.platform === 'win32';
 const home = os.homedir();
 const codebuddyHome = process.env.CODEBUDDY_HOME || path.join(home, '.codebuddy');
 const projectsDir = process.env.CODEBUDDY_PROJECTS_DIR || path.join(codebuddyHome, 'projects');
@@ -14,7 +15,6 @@ const euphonyRepo = process.env.EUPHONY_REPO || 'https://github.com/openai/eupho
 const host = process.env.EUPHONY_HOST || '127.0.0.1';
 const port = Number(process.env.EUPHONY_PORT || '3000');
 const maxLines = process.env.EUPHONY_FRONTEND_ONLY_MAX_LINES || '100000';
-const tmuxSession = process.env.EUPHONY_TMUX_SESSION || `codebuddy-euphony-${port}`;
 const baseUrl = `http://${host}:${port}/`;
 const runDir = process.env.EUPHONY_RUN_DIR || path.join(euphonyDir, '.codebuddy-euphony');
 const pidFile = path.join(runDir, 'vite.pid');
@@ -58,7 +58,13 @@ function fail(message) {
 
 function commandExists(command) {
   try {
-    execFileSync('/bin/sh', ['-lc', `command -v ${shellQuote(command)} >/dev/null 2>&1`], { stdio: 'ignore' });
+    if (isWindows) {
+      execFileSync('where', [command], { stdio: 'ignore', shell: true });
+    } else {
+      execFileSync('/bin/sh', ['-lc', `command -v ${shellQuote(command)} >/dev/null 2>&1`], {
+        stdio: 'ignore'
+      });
+    }
     return true;
   } catch {
     return false;
@@ -67,6 +73,14 @@ function commandExists(command) {
 
 function requireCommand(command) {
   if (!commandExists(command)) fail(`${command} is required for this command.`);
+}
+
+function run(command, args, options = {}) {
+  return execFileSync(command, args, {
+    ...options,
+    shell: isWindows && command === 'corepack',
+    stdio: options.stdio || 'inherit'
+  });
 }
 
 function requireProjectsDir() {
@@ -100,7 +114,7 @@ function ensureEuphonyDir() {
     patchEuphonyFrontendLimit();
     if (!fs.existsSync(path.join(euphonyDir, 'node_modules'))) {
       requireCommand('corepack');
-      execFileSync('corepack', ['pnpm', 'install'], { cwd: euphonyDir, stdio: 'inherit' });
+      run('corepack', ['pnpm', 'install'], { cwd: euphonyDir });
     }
     return;
   }
@@ -114,10 +128,10 @@ Remove it or set EUPHONY_DIR to another path.`);
   requireCommand('corepack');
   fs.mkdirSync(path.dirname(euphonyDir), { recursive: true });
   console.log(`Cloning Euphony into ${euphonyDir}...`);
-  execFileSync('git', ['clone', euphonyRepo, euphonyDir], { stdio: 'inherit' });
+  run('git', ['clone', euphonyRepo, euphonyDir]);
   patchEuphonyFrontendLimit();
   console.log(`Installing Euphony dependencies in ${euphonyDir}...`);
-  execFileSync('corepack', ['pnpm', 'install'], { cwd: euphonyDir, stdio: 'inherit' });
+  run('corepack', ['pnpm', 'install'], { cwd: euphonyDir });
 }
 
 function walkJsonlFiles(dir, out = []) {
@@ -353,12 +367,6 @@ function stageCommand(input = latestSession()) {
 }
 
 function requestHead(url, timeoutMs = 2000) {
-  try {
-    execFileSync('curl', ['-fsSI', '--max-time', String(Math.ceil(timeoutMs / 1000)), url], {
-      stdio: ['ignore', 'ignore', 'ignore']
-    });
-    return Promise.resolve(true);
-  } catch {}
   return new Promise(resolve => {
     const request = http.request(url, { method: 'HEAD', timeout: timeoutMs }, response => {
       response.resume();
@@ -373,91 +381,105 @@ function requestHead(url, timeoutMs = 2000) {
   });
 }
 
-function lsofPids() {
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
+function readTrackedPid() {
+  if (!fs.existsSync(pidFile)) return null;
+  const text = fs.readFileSync(pidFile, 'utf8').trim();
+  if (!/^\d+$/.test(text)) return null;
+  return Number(text);
+}
+
+function pidExists(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function trackedPid() {
+  const pid = readTrackedPid();
+  return pidExists(pid) ? pid : null;
+}
+
+function legacyCheckoutPids() {
+  if (isWindows || !commandExists('lsof')) return [];
   try {
     const output = execFileSync('lsof', ['-nP', `-tiTCP:${port}`, '-sTCP:LISTEN'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore']
     });
-    return output.split(/\r?\n/).filter(Boolean);
+    return output
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .filter(pid => {
+        try {
+          const cwdOutput = execFileSync('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore']
+          });
+          const cwd = cwdOutput
+            .split(/\r?\n/)
+            .find(line => line.startsWith('n'))
+            ?.slice(1);
+          return cwd === euphonyDir;
+        } catch {
+          return false;
+        }
+      })
+      .map(Number);
   } catch {
     return [];
   }
 }
 
-function pidCwd(pid) {
-  try {
-    const output = execFileSync('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore']
-    });
-    return output
-      .split(/\r?\n/)
-      .find(line => line.startsWith('n'))
-      ?.slice(1);
-  } catch {
-    return null;
-  }
-}
-
-function euphonyPids() {
-  return lsofPids().filter(pid => pidCwd(pid) === euphonyDir);
-}
-
-async function isRunning() {
-  return euphonyPids().length > 0 && (await requestHead(baseUrl));
-}
-
-function shellQuote(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
+function trackedOrAdoptedPid() {
+  const pid = trackedPid();
+  if (pid) return pid;
+  const [legacyPid] = legacyCheckoutPids();
+  if (!legacyPid) return null;
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(pidFile, `${legacyPid}\n`);
+  return legacyPid;
 }
 
 function startViteBackground() {
   fs.mkdirSync(runDir, { recursive: true });
-  const runner = path.join(runDir, 'start-vite.sh');
-  fs.writeFileSync(
-    runner,
-    `#!/usr/bin/env bash
-set -euo pipefail
-cd ${shellQuote(euphonyDir)}
-exec env VITE_EUPHONY_FRONTEND_ONLY=true VITE_EUPHONY_FRONTEND_ONLY_MAX_LINES=${shellQuote(maxLines)} corepack pnpm exec vite --host ${shellQuote(host)} --port ${shellQuote(String(port))}
-`
-  );
-  fs.chmodSync(runner, 0o755);
-
-  if (commandExists('tmux')) {
-    try {
-      execFileSync('tmux', ['has-session', '-t', tmuxSession], { stdio: 'ignore' });
-      execFileSync('tmux', ['kill-session', '-t', tmuxSession], { stdio: 'ignore' });
-    } catch {}
-    execFileSync('tmux', ['new-session', '-d', '-s', tmuxSession, `${runner} > ${shellQuote(logFile)} 2>&1`], {
-      stdio: 'ignore'
-    });
-    fs.writeFileSync(pidFile, `tmux:${tmuxSession}\n`);
-    return;
-  }
-
   const logFd = fs.openSync(logFile, 'a');
-  const child = spawn(runner, { cwd: euphonyDir, detached: true, stdio: ['ignore', logFd, logFd] });
+  const child = spawn('corepack', ['pnpm', 'exec', 'vite', '--host', host, '--port', String(port)], {
+    cwd: euphonyDir,
+    detached: true,
+    shell: isWindows,
+    env: {
+      ...process.env,
+      VITE_EUPHONY_FRONTEND_ONLY: 'true',
+      VITE_EUPHONY_FRONTEND_ONLY_MAX_LINES: maxLines
+    },
+    stdio: ['ignore', logFd, logFd]
+  });
   child.unref();
   fs.writeFileSync(pidFile, `${child.pid}\n`);
 }
 
 async function up() {
+  const existingPid = trackedOrAdoptedPid();
   if (await requestHead(baseUrl)) {
-    const pids = euphonyPids();
-    if (pids.length > 0) {
+    if (existingPid) {
       ensureEuphonyDir();
       console.log(`Euphony responds at ${baseUrl}`);
+      console.log(`PID: ${existingPid}`);
       return;
     }
-    fail(`Port ${port} responds at ${baseUrl}, but not from this Euphony checkout: ${euphonyDir}
+    fail(`Port ${port} responds at ${baseUrl}, but this script has no live pid file for it.
 Stop the other server or set EUPHONY_PORT to another value.`);
   }
   ensureEuphonyDir();
-  if (euphonyPids().length === 0) {
-    startViteBackground();
-  }
+  if (!existingPid) startViteBackground();
   console.log(`Starting Euphony at ${baseUrl}`);
   console.log(`Log: ${logFile}`);
   for (let i = 0; i < 300; i += 1) {
@@ -477,6 +499,7 @@ async function startForeground() {
     ['pnpm', 'exec', 'vite', '--host', host, '--port', String(port)],
     {
       cwd: euphonyDir,
+      shell: isWindows,
       env: {
         ...process.env,
         VITE_EUPHONY_FRONTEND_ONLY: 'true',
@@ -488,46 +511,44 @@ async function startForeground() {
   child.on('exit', code => process.exit(code ?? 0));
 }
 
+function killProcessTree(pid) {
+  if (isWindows) {
+    execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', shell: true });
+  } else {
+    process.kill(pid, 'SIGTERM');
+  }
+}
+
 function stop() {
-  const pids = new Set(euphonyPids());
-  let stopped = false;
-  if (commandExists('tmux')) {
-    try {
-      execFileSync('tmux', ['has-session', '-t', tmuxSession], { stdio: 'ignore' });
-      execFileSync('tmux', ['kill-session', '-t', tmuxSession], { stdio: 'ignore' });
-      console.log(`Stopped Euphony tmux session ${tmuxSession}`);
-      stopped = true;
-    } catch {}
-  }
-  for (const pid of pids) {
-    try {
-      process.kill(Number(pid), 'SIGTERM');
-      console.log(`Stopped PID ${pid}`);
-      stopped = true;
-    } catch (error) {
-      console.log(`Could not stop PID ${pid}: ${error.message}`);
-    }
-  }
-  if (!stopped) {
-    console.log('No Euphony listener for this checkout found.');
+  const pid = trackedOrAdoptedPid();
+  if (!pid) {
+    if (fs.existsSync(pidFile)) fs.rmSync(pidFile, { force: true });
+    console.log('No tracked Euphony process found.');
     return;
   }
-  if (fs.existsSync(pidFile)) fs.rmSync(pidFile);
+  try {
+    killProcessTree(pid);
+    console.log(`Stopped PID ${pid}`);
+  } catch (error) {
+    console.log(`Could not stop PID ${pid}: ${error.message}`);
+  }
+  fs.rmSync(pidFile, { force: true });
 }
 
 async function status() {
-  const pids = euphonyPids();
+  const pid = trackedOrAdoptedPid();
   if (await requestHead(baseUrl)) {
-    if (pids.length > 0) {
+    if (pid) {
       console.log(`Euphony responds at ${baseUrl}`);
-      console.log(`PID(s): ${pids.join(', ')}`);
+      console.log(`PID: ${pid}`);
       return;
     }
-    console.log(`Port ${port} responds at ${baseUrl}, but not from this Euphony checkout: ${euphonyDir}`);
+    console.log(`Port ${port} responds at ${baseUrl}, but this script has no live pid file for it.`);
     process.exitCode = 1;
     return;
   }
   console.log(`Euphony is not responding at ${baseUrl}`);
+  if (pid) console.log(`Tracked PID exists but HTTP is not ready: ${pid}`);
   process.exitCode = 1;
 }
 

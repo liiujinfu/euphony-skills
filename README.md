@@ -16,7 +16,7 @@ Each skill directory is self-contained, so it can still be installed by path. Th
 - Node.js 18 or newer.
 - `git`, used when a skill needs to clone the Euphony runtime checkout.
 - `corepack`, used to run `pnpm install` for Euphony.
-- macOS, Linux, or another environment with a local browser opener.
+- macOS, Linux, or Windows with a local browser opener.
 
 The installer itself does not install Euphony dependencies. The selected skill does that lazily the first time it starts Euphony.
 
@@ -129,9 +129,9 @@ You can also run the scripts directly.
 Codex:
 
 ```bash
-~/.codex/skills/codex-euphony/scripts/codex-euphony.sh open
-~/.codex/skills/codex-euphony/scripts/codex-euphony.sh status
-~/.codex/skills/codex-euphony/scripts/codex-euphony.sh stop
+node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs open
+node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs status
+node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs stop
 ```
 
 CodeBuddy:
@@ -153,12 +153,21 @@ At runtime:
 - If the cache is deleted, the skill recreates it on the next command that needs Euphony.
 - The local Euphony server binds to `127.0.0.1`.
 - The default port is `3000`.
+- Codex staging uses a symlink on macOS/Linux and a copy on Windows by default. Set `EUPHONY_STAGE_MODE=copy` to force snapshot staging everywhere.
+- Background servers are tracked with a pid file under the Euphony cache, so `stop` only controls servers started by the same skill script.
 
 If port `3000` is already occupied, use another port:
 
 ```bash
-EUPHONY_PORT=3001 ~/.codex/skills/codex-euphony/scripts/codex-euphony.sh open
+EUPHONY_PORT=3001 node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs open
 EUPHONY_PORT=3001 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open
+```
+
+Windows PowerShell example:
+
+```powershell
+$env:EUPHONY_PORT = "3001"
+node "$env:USERPROFILE\.codex\skills\codex-euphony\scripts\codex-euphony.mjs" open
 ```
 
 ## Privacy
@@ -192,7 +201,7 @@ npm_config_cache=/tmp/euphony-skills-npm-cache npx @jefferylau/euphony-skills do
 If multiple Euphony servers are running, stop the relevant one or choose a different port:
 
 ```bash
-~/.codex/skills/codex-euphony/scripts/codex-euphony.sh stop
+node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs stop
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs stop
 ```
 

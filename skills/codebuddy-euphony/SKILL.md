@@ -12,6 +12,7 @@ Euphony can read Codex-session JSONL, so this skill converts CodeBuddy events to
 
 The skill manages Euphony as a disposable runtime checkout under `${CODEBUDDY_HOME:-$HOME/.codebuddy}/cache/euphony` by default.
 If that cache is deleted, it is recreated on the next command that needs Euphony.
+The script is a Node.js 18+ executable and works on macOS, Linux, and Windows.
 
 ## Workflow
 
@@ -52,6 +53,7 @@ ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-e
 ```
 
 Report the printed Euphony URL after the server responds.
+The stop command kills the Euphony process tracked by this script's pid file.
 
 ## Script Commands
 

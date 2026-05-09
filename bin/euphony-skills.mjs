@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const home = os.homedir();
+const isWindows = process.platform === 'win32';
 
 const targets = {
   codex: {
@@ -14,7 +15,7 @@ const targets = {
     homeEnv: 'CODEX_HOME',
     defaultHome: path.join(home, '.codex'),
     skillName: 'codex-euphony',
-    executables: ['scripts/codex-euphony.sh']
+    executables: ['scripts/codex-euphony.mjs', 'scripts/codex-euphony.sh']
   },
   codebuddy: {
     label: 'CodeBuddy',
@@ -50,9 +51,13 @@ function fail(message) {
 
 function commandExists(command) {
   try {
-    execFileSync('/bin/sh', ['-lc', `command -v ${shellQuote(command)} >/dev/null 2>&1`], {
-      stdio: 'ignore'
-    });
+    if (isWindows) {
+      execFileSync('where', [command], { stdio: 'ignore', shell: true });
+    } else {
+      execFileSync('/bin/sh', ['-lc', `command -v ${shellQuote(command)} >/dev/null 2>&1`], {
+        stdio: 'ignore'
+      });
+    }
     return true;
   } catch {
     return false;
@@ -114,6 +119,7 @@ function copyRecursive(src, dest) {
 }
 
 function chmodExecutables(targetKey) {
+  if (isWindows) return;
   const target = targets[targetKey];
   const dest = installDirFor(targetKey);
   for (const relative of target.executables) {
@@ -179,7 +185,7 @@ function statInstall(targetKey) {
 
 function doctor() {
   console.log(`Node: ${process.version}`);
-  for (const command of ['git', 'corepack', 'curl']) {
+  for (const command of ['git', 'corepack']) {
     console.log(`${command}: ${commandExists(command) ? 'found' : 'missing'}`);
   }
   for (const key of Object.keys(targets)) {
