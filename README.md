@@ -25,27 +25,27 @@ The installer itself does not install Euphony dependencies. The selected skill d
 Install from npm after the package is published:
 
 ```bash
-npx euphony-skills install codex
-npx euphony-skills install codebuddy
-npx euphony-skills install all
+npx @jefferylau/euphony-skills install codex
+npx @jefferylau/euphony-skills install codebuddy
+npx @jefferylau/euphony-skills install all
 ```
 
 Replace an existing install:
 
 ```bash
-npx euphony-skills install all --force
+npx @jefferylau/euphony-skills install all --force
 ```
 
 Remove installed skills:
 
 ```bash
-npx euphony-skills uninstall all
+npx @jefferylau/euphony-skills uninstall all
 ```
 
 Check local state:
 
 ```bash
-npx euphony-skills doctor
+npx @jefferylau/euphony-skills doctor
 ```
 
 Restart Codex or CodeBuddy after installing so the host application reloads skills.
@@ -55,7 +55,7 @@ Restart Codex or CodeBuddy after installing so the host application reloads skil
 From a cloned repository:
 
 ```bash
-git clone https://github.com/yourname/euphony-skills.git
+git clone https://github.com/liiujinfu/euphony-skills.git
 cd euphony-skills
 node bin/euphony-skills.mjs install all --force
 ```
@@ -85,8 +85,8 @@ ${CODEBUDDY_HOME:-~/.codebuddy}/skills/codebuddy-euphony
 Override host homes when needed:
 
 ```bash
-CODEX_HOME=/custom/.codex npx euphony-skills install codex
-CODEBUDDY_HOME=/custom/.codebuddy npx euphony-skills install codebuddy
+CODEX_HOME=/custom/.codex npx @jefferylau/euphony-skills install codex
+CODEBUDDY_HOME=/custom/.codebuddy npx @jefferylau/euphony-skills install codebuddy
 ```
 
 ## CLI Reference
@@ -174,19 +174,19 @@ If a host app does not see the skill, restart Codex or CodeBuddy after installat
 If installation says the skill already exists, rerun with `--force`:
 
 ```bash
-npx euphony-skills install codebuddy --force
+npx @jefferylau/euphony-skills install codebuddy --force
 ```
 
 If Euphony fails to start, check prerequisites:
 
 ```bash
-npx euphony-skills doctor
+npx @jefferylau/euphony-skills doctor
 ```
 
 If `npm` reports cache permission errors, use a temporary cache or repair the npm cache ownership:
 
 ```bash
-npm_config_cache=/tmp/euphony-skills-npm-cache npx euphony-skills doctor
+npm_config_cache=/tmp/euphony-skills-npm-cache npx @jefferylau/euphony-skills doctor
 ```
 
 If multiple Euphony servers are running, stop the relevant one or choose a different port:

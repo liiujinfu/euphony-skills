@@ -1,5 +1,5 @@
 {
-  "name": "euphony-skills",
+  "name": "@jefferylau/euphony-skills",
   "version": "0.1.0",
   "description": "Install Euphony viewer skills for Codex and CodeBuddy.",
   "type": "module",

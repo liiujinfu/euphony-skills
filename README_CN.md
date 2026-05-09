@@ -25,27 +25,27 @@
 发布到 npm 后，可以这样安装：
 
 ```bash
-npx euphony-skills install codex
-npx euphony-skills install codebuddy
-npx euphony-skills install all
+npx @jefferylau/euphony-skills install codex
+npx @jefferylau/euphony-skills install codebuddy
+npx @jefferylau/euphony-skills install all
 ```
 
 替换已有安装：
 
 ```bash
-npx euphony-skills install all --force
+npx @jefferylau/euphony-skills install all --force
 ```
 
 卸载已安装的 skill：
 
 ```bash
-npx euphony-skills uninstall all
+npx @jefferylau/euphony-skills uninstall all
 ```
 
 检查本机状态：
 
 ```bash
-npx euphony-skills doctor
+npx @jefferylau/euphony-skills doctor
 ```
 
 安装后需要重启 Codex 或 CodeBuddy，让宿主重新加载 skill。
@@ -55,7 +55,7 @@ npx euphony-skills doctor
 从本地 clone 安装：
 
 ```bash
-git clone https://github.com/yourname/euphony-skills.git
+git clone https://github.com/liiujinfu/euphony-skills.git
 cd euphony-skills
 node bin/euphony-skills.mjs install all --force
 ```
@@ -85,8 +85,8 @@ ${CODEBUDDY_HOME:-~/.codebuddy}/skills/codebuddy-euphony
 需要时可以覆盖宿主 home 目录：
 
 ```bash
-CODEX_HOME=/custom/.codex npx euphony-skills install codex
-CODEBUDDY_HOME=/custom/.codebuddy npx euphony-skills install codebuddy
+CODEX_HOME=/custom/.codex npx @jefferylau/euphony-skills install codex
+CODEBUDDY_HOME=/custom/.codebuddy npx @jefferylau/euphony-skills install codebuddy
 ```
 
 ## CLI 参考
@@ -174,19 +174,19 @@ EUPHONY_PORT=3001 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphon
 如果安装提示 skill 已存在，使用 `--force`：
 
 ```bash
-npx euphony-skills install codebuddy --force
+npx @jefferylau/euphony-skills install codebuddy --force
 ```
 
 如果 Euphony 启动失败，先检查依赖和安装状态：
 
 ```bash
-npx euphony-skills doctor
+npx @jefferylau/euphony-skills doctor
 ```
 
 如果 `npm` 报 cache 权限错误，可以使用临时 cache，或修复 npm cache 目录权限：
 
 ```bash
-npm_config_cache=/tmp/euphony-skills-npm-cache npx euphony-skills doctor
+npm_config_cache=/tmp/euphony-skills-npm-cache npx @jefferylau/euphony-skills doctor
 ```
 
 如果有多个 Euphony 服务在跑，停止对应服务或换端口：
