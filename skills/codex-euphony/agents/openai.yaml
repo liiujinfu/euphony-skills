@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Euphony"
+  short_description: "Open local Codex sessions in Euphony."
+  default_prompt: "Open my latest local Codex session in Euphony."

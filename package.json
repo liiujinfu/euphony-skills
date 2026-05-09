@@ -1,0 +1,25 @@
+{
+  "name": "euphony-skills",
+  "version": "0.1.0",
+  "description": "Install Euphony viewer skills for Codex and CodeBuddy.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "euphony-skills": "./bin/euphony-skills.mjs"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "skills",
+    "README.md",
+    "README_CN.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "node --check bin/euphony-skills.mjs && node --check skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs",
+    "doctor": "node bin/euphony-skills.mjs doctor"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
