@@ -26,6 +26,19 @@ const host = process.env.EUPHONY_HOST || '127.0.0.1';
 const port = Number(process.env.EUPHONY_PORT || '3000');
 const maxLines = process.env.EUPHONY_FRONTEND_ONLY_MAX_LINES || '100000';
 const runDir = process.env.EUPHONY_RUN_DIR || path.join(euphonyDir, '.codebuddy-euphony');
+const currentSessionId =
+  process.env.CODEBUDDY_EUPHONY_SESSION_ID ||
+  process.env.CODEBUDDY_SESSION_ID ||
+  process.env.CODEBUDDY_CONVERSATION_ID ||
+  process.env.CODEBUDDY_THREAD_ID ||
+  '';
+const currentWorkspace =
+  process.env.CODEBUDDY_WORKSPACE_DIR ||
+  process.env.CODEBUDDY_CWD ||
+  process.env.WORKSPACE_FOLDER ||
+  process.env.PROJECT_DIR ||
+  process.env.INIT_CWD ||
+  process.cwd();
 const stagedDir = path.join(euphonyDir, 'public', 'local-codebuddy');
 const stagedJsonl = path.join(stagedDir, 'latest.jsonl');
 const stagedSource = path.join(stagedDir, 'latest-source.txt');
@@ -56,12 +69,13 @@ function usage() {
 Commands:
   list             List recent CodeBuddy CLI JSONL and desktop sessions.
   latest           Print the newest CodeBuddy session path.
+  current          Print the current CodeBuddy session path when it can be identified.
   latest-desktop   Print the newest CodeBuddy desktop session path.
   convert [in] [out]
                    Convert a CodeBuddy session to Euphony-compatible JSONL.
-  stage [file]     Convert into Euphony public/local-codebuddy/latest.jsonl and print a load URL.
+  stage [file|id]  Convert into Euphony public/local-codebuddy/latest.jsonl and print a load URL.
   stage-desktop    Stage the newest CodeBuddy desktop session.
-  open [file]      Stage a session, ensure Euphony is running, and open it in the browser.
+  open [file|id]   Stage a session, ensure Euphony is running, and open it in the browser.
   open-desktop     Open the newest CodeBuddy desktop session.
   up               Start Euphony in the background if it is not already running.
   start            Start Euphony Vite dev server in the foreground.
@@ -75,6 +89,9 @@ Environment:
   CODEBUDDY_DESKTOP_DATA_DIR
                           Default: CodeBuddyExtension/Data under the OS app data directory
   CODEBUDDY_INCLUDE_SUBAGENTS=1 to include subagent JSONL files
+  CODEBUDDY_EUPHONY_SESSION_ID
+                          Optional session id override. Defaults to CodeBuddy session/conversation/thread env vars.
+  CODEBUDDY_WORKSPACE_DIR Optional workspace path override used when no session id is available.
   EUPHONY_DIR             Default: $CODEBUDDY_HOME/cache/euphony
   EUPHONY_HOST            Default: 127.0.0.1
   EUPHONY_PORT            Default: 3000
@@ -93,8 +110,36 @@ function writeJsonl(events, outFile) {
   fs.writeFileSync(outFile, `${events.map(event => JSON.stringify(event)).join('\n')}\n`);
 }
 
-function convertCommand(input = sessions.latestSession(), output) {
-  const session = sessions.normalizeSessionInput(input);
+function currentSession(type) {
+  return sessions.currentSession({ sessionId: currentSessionId, cwd: currentWorkspace, type });
+}
+
+function defaultSession() {
+  return currentSession() || sessions.latestSession();
+}
+
+function resolveSessionInput(input) {
+  if (!input) return defaultSession();
+  if (input === 'current') {
+    const current = currentSession();
+    if (!current) {
+      fail(`Current CodeBuddy session was not found.
+Session id: ${currentSessionId || '[not provided]'}
+Workspace: ${currentWorkspace || '[not provided]'}`);
+    }
+    return current;
+  }
+  if (input === 'latest') return sessions.latestSession();
+  if (input === 'latest-desktop') return sessions.latestSessionByType('desktop');
+  const resolved = path.resolve(input);
+  if (fs.existsSync(resolved)) return resolved;
+  const matched = sessions.findSessionById(input);
+  if (matched) return matched;
+  fail(`Session path or id not found: ${input}`);
+}
+
+function convertCommand(input, output) {
+  const session = sessions.normalizeSessionInput(resolveSessionInput(input));
   const outFile = output ? path.resolve(output) : stableJsonlOutputPath(session.source, session.type);
   const converted = convertCodeBuddySessionToCodex(session);
   writeJsonl(converted, outFile);
@@ -103,9 +148,9 @@ function convertCommand(input = sessions.latestSession(), output) {
   return outFile;
 }
 
-function stageCommand(input = sessions.latestSession()) {
+function stageCommand(input) {
   runtime.ensureEuphonyDir();
-  const session = sessions.normalizeSessionInput(input);
+  const session = sessions.normalizeSessionInput(resolveSessionInput(input));
   const converted = convertCodeBuddySessionToCodex(session);
   writeJsonl(converted, stagedJsonl);
   fs.writeFileSync(stagedSource, `${session.source}\n`);
@@ -131,7 +176,7 @@ Stop the other server or set EUPHONY_PORT to another value.`);
 
 async function openCommand(input) {
   await runtime.up();
-  stageCommand(input || sessions.latestSession());
+  stageCommand(input);
   await verifyStagedJsonlIsServed();
   const url = `${baseUrl}?path=${baseUrl}local-codebuddy/latest.jsonl&no-cache=true`;
   runtime.openBrowser(url);
@@ -151,14 +196,24 @@ async function main() {
     case 'latest':
       console.log(sessions.latestSession());
       break;
+    case 'current': {
+      const current = currentSession();
+      if (!current) {
+        fail(`Current CodeBuddy session was not found.
+Session id: ${currentSessionId || '[not provided]'}
+Workspace: ${currentWorkspace || '[not provided]'}`);
+      }
+      console.log(current);
+      break;
+    }
     case 'latest-desktop':
       console.log(sessions.latestSessionByType('desktop'));
       break;
     case 'convert':
-      convertCommand(arg1 || sessions.latestSession(), arg2);
+      convertCommand(arg1, arg2);
       break;
     case 'stage':
-      stageCommand(arg1 || sessions.latestSession());
+      stageCommand(arg1);
       break;
     case 'stage-desktop':
       stageCommand(sessions.latestSessionByType('desktop'));

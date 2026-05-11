@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const script = path.join(rootDir, 'skills', 'codebuddy-euphony', 'scripts', 'codebuddy-euphony.mjs');
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'euphony-skills-test-'));
+const cliFixture = path.join(rootDir, 'test', 'fixtures', 'codebuddy-cli', 'session.jsonl');
+const desktopRoot = path.join(rootDir, 'test', 'fixtures', 'codebuddy-desktop');
+const desktopFixture = path.join(desktopRoot, 'conversation-1');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -27,13 +30,48 @@ function convert(input, outputName) {
 }
 
 const cliRows = convert(
-  path.join(rootDir, 'test', 'fixtures', 'codebuddy-cli', 'session.jsonl'),
+  cliFixture,
   'cli.jsonl'
 );
 assert(cliRows.some(row => row.payload?.type === 'message' && row.payload.content?.[0]?.text === 'hello cli'), 'CLI message was not converted.');
 assert(cliRows.some(row => row.type === 'session_meta' && row.payload?.session_label === 'CodeBuddy session'), 'CLI session label was not set.');
 assert(cliRows.some(row => row.payload?.type === 'function_call' && row.payload.name === 'exec_command'), 'CLI execute_command was not normalized.');
 assert(cliRows.some(row => row.payload?.type === 'function_call_output' && row.payload.output === 'cli'), 'CLI command output was not simplified.');
+assert(
+  cliRows.some(
+    row =>
+      row.type === 'turn_context' &&
+      row.payload?.model === 'ep-test123' &&
+      !('codebuddy_model_id' in row.payload)
+  ),
+  'CLI model should be displayed exactly as recorded in providerData.model.'
+);
+
+const idOnlyFixture = path.join(tempDir, 'id-only.jsonl');
+fs.writeFileSync(
+  idOnlyFixture,
+  `${JSON.stringify({
+    timestamp: '2026-05-09T08:00:00.000Z',
+    type: 'message',
+    id: 'id-only-user-1',
+    role: 'user',
+    sessionId: 'id-only-session',
+    cwd: '/tmp/codebuddy-cli',
+    content: [{ type: 'text', text: 'hello id only' }],
+    providerData: { model: 'ep-only123' }
+  })}\n`
+);
+const idOnlyRows = convert(idOnlyFixture, 'id-only-output.jsonl');
+assert(
+  idOnlyRows.some(
+    row =>
+      row.type === 'turn_context' &&
+      row.payload?.model === 'ep-only123' &&
+      !('codebuddy_model_id' in row.payload)
+  ),
+  'CLI model id should be displayed when no specific display-name field exists.'
+);
+
 assert(
   cliRows.some(
     row =>
@@ -46,7 +84,7 @@ assert(
 );
 
 const desktopRows = convert(
-  path.join(rootDir, 'test', 'fixtures', 'codebuddy-desktop', 'conversation-1'),
+  desktopFixture,
   'desktop.jsonl'
 );
 const desktopText = desktopRows.map(row => row.payload?.content?.[0]?.text || row.payload?.output || '').join('\n');
@@ -55,5 +93,30 @@ assert(!desktopText.includes('[resource_link]'), 'Desktop resource_link placehol
 assert(!desktopText.includes('Injected context should not be shown'), 'Desktop sourceContentBlocks did not override injected content.');
 assert(desktopRows.some(row => row.payload?.type === 'function_call' && row.payload.name === 'exec_command'), 'Desktop tool call was not converted.');
 assert(desktopRows.some(row => row.payload?.type === 'function_call_output' && row.payload.output === '/tmp/codebuddy-desktop'), 'Desktop tool result was not converted.');
+
+const currentCli = execFileSync(process.execPath, [script, 'current'], {
+  cwd: rootDir,
+  env: {
+    ...process.env,
+    CODEBUDDY_PROJECTS_DIR: path.dirname(cliFixture),
+    CODEBUDDY_DESKTOP_DATA_DIR: desktopRoot,
+    CODEBUDDY_EUPHONY_SESSION_ID: 'cli-session'
+  },
+  encoding: 'utf8'
+}).trim();
+assert(currentCli === cliFixture, 'CodeBuddy current command did not select session id match.');
+
+const currentDesktop = execFileSync(process.execPath, [script, 'current'], {
+  cwd: rootDir,
+  env: {
+    ...process.env,
+    CODEBUDDY_PROJECTS_DIR: path.dirname(cliFixture),
+    CODEBUDDY_DESKTOP_DATA_DIR: desktopRoot,
+    CODEBUDDY_EUPHONY_SESSION_ID: '',
+    CODEBUDDY_WORKSPACE_DIR: '/tmp/injected'
+  },
+  encoding: 'utf8'
+}).trim();
+assert(currentDesktop === desktopFixture, 'CodeBuddy current command did not select workspace match.');
 
 console.log('CodeBuddy conversion fixtures passed.');

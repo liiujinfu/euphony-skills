@@ -5,6 +5,14 @@ function defaultFail(message) {
   throw new Error(message);
 }
 
+function safeJsonParse(text, fallback = null) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return fallback;
+  }
+}
+
 function walkJsonlFiles(dir, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === '.DS_Store') continue;
@@ -71,6 +79,83 @@ export function desktopSessionMtime(sessionDir) {
   return mtimeMs;
 }
 
+function readJsonlPrefix(file, maxLines = 20) {
+  let text = '';
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  return text
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .slice(0, maxLines)
+    .map(line => safeJsonParse(line))
+    .filter(Boolean);
+}
+
+function cliSessionId(file) {
+  const basename = path.basename(file, '.jsonl');
+  return readJsonlPrefix(file).find(event => typeof event.sessionId === 'string')?.sessionId || basename;
+}
+
+function cliWorkspace(file) {
+  return readJsonlPrefix(file).find(event => typeof event.cwd === 'string')?.cwd || null;
+}
+
+function textFromUnknown(value) {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(textFromUnknown).filter(Boolean).join('\n');
+  if (value && typeof value === 'object') {
+    for (const key of ['text', 'message', 'content', 'value']) {
+      if (key in value) {
+        const text = textFromUnknown(value[key]);
+        if (text) return text;
+      }
+    }
+  }
+  return '';
+}
+
+function extractWorkspaceFromText(text) {
+  const match = /Workspace Folder:\s*([^\n\r]+)/.exec(text);
+  return match?.[1]?.trim() || null;
+}
+
+function desktopWorkspace(sessionDir) {
+  let index = { messages: [] };
+  try {
+    index = safeJsonParse(fs.readFileSync(path.join(sessionDir, 'index.json'), 'utf8'), { messages: [] });
+  } catch {
+    return null;
+  }
+  const messages = Array.isArray(index.messages) ? index.messages.slice(0, 20) : [];
+  for (const messageRef of messages) {
+    const messageFile = path.join(sessionDir, 'messages', `${messageRef.id}.json`);
+    if (!safeStat(messageFile)?.isFile()) continue;
+    let raw = {};
+    try {
+      raw = safeJsonParse(fs.readFileSync(messageFile, 'utf8'), {});
+    } catch {
+      continue;
+    }
+    const embeddedMessage = safeJsonParse(raw.message, {});
+    const workspace =
+      extractWorkspaceFromText(textFromUnknown(embeddedMessage.content)) ||
+      extractWorkspaceFromText(textFromUnknown(embeddedMessage.message)) ||
+      extractWorkspaceFromText(textFromUnknown(raw.message));
+    if (workspace) return workspace;
+  }
+  return null;
+}
+
+function normalizeComparablePath(value) {
+  if (!value || typeof value !== 'string') return '';
+  const resolved = path.resolve(value);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
 export function createCodeBuddySessionStore({
   projectsDir,
   desktopDataDir,
@@ -110,6 +195,41 @@ Checked desktop sessions: ${desktopDataDir}`);
     return latest.file;
   }
 
+  function sessionId(item) {
+    return item.type === 'cli' ? cliSessionId(item.file) : path.basename(item.file);
+  }
+
+  function sessionWorkspace(item) {
+    return item.type === 'cli' ? cliWorkspace(item.file) : desktopWorkspace(item.file);
+  }
+
+  function findSessionById(id, type) {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return null;
+    return (
+      recentSessions().find(item => {
+        if (type && item.type !== type) return false;
+        const basename = path.basename(item.file, path.extname(item.file));
+        return basename.includes(normalizedId) || sessionId(item) === normalizedId;
+      })?.file || null
+    );
+  }
+
+  function findSessionByWorkspace(cwd, type) {
+    const normalizedCwd = normalizeComparablePath(cwd);
+    if (!normalizedCwd) return null;
+    return (
+      recentSessions().find(item => {
+        if (type && item.type !== type) return false;
+        return normalizeComparablePath(sessionWorkspace(item)) === normalizedCwd;
+      })?.file || null
+    );
+  }
+
+  function currentSession({ sessionId: currentSessionId, cwd, type } = {}) {
+    return findSessionById(currentSessionId, type) || findSessionByWorkspace(cwd, type);
+  }
+
   function normalizeSessionInput(input) {
     const source = path.resolve(input);
     const stat = safeStat(source);
@@ -128,10 +248,11 @@ Expected a CLI .jsonl file or a desktop conversation directory containing index.
   }
 
   return {
+    currentSession,
+    findSessionById,
     latestSession,
     latestSessionByType,
     normalizeSessionInput,
     recentSessions
   };
 }
-

@@ -25,16 +25,24 @@ The script prefers a directly installed `pnpm`; if only Corepack is available, i
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs latest
 ```
 
-2. For normal user requests, open the latest session directly in the default browser:
+2. Find the current Codex session without starting Euphony:
+
+```bash
+node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs current
+```
+
+The script uses `CODEX_THREAD_ID` when Codex exposes it to child commands. If that id is not available or the matching rollout cannot be found, commands without an explicit file fall back to `latest`.
+
+3. For normal user requests, open the current session directly in the default browser:
 
 ```bash
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs open
 ```
 
 This is the default path for requests like "open Euphony", "show my latest Codex session", or "view this session in Euphony".
-It ensures Euphony is installed and running, stages the latest session, prints the load URL, and opens it in the system browser.
+It ensures Euphony is installed and running, stages the current session when it can be identified, prints the load URL, and opens it in the system browser.
 
-3. If the user only wants a URL, or GUI opening is unavailable, print a browser URL instead:
+4. If the user only wants a URL, or GUI opening is unavailable, print a browser URL instead:
 
 ```bash
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs url
@@ -46,7 +54,7 @@ This ensures Euphony is installed and running, stages the latest session, and pr
 http://127.0.0.1:3000/?path=http://127.0.0.1:3000/local-codex/latest.jsonl&no-cache=true
 ```
 
-4. If Euphony is already running and you only need to refresh the staged JSONL, use the lightweight path:
+5. If Euphony is already running and you only need to refresh the staged JSONL, use the lightweight path:
 
 ```bash
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs stage
@@ -54,13 +62,13 @@ node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs 
 
 This avoids restarting Euphony and normally avoids escalation.
 
-5. Check whether Euphony is already running:
+6. Check whether Euphony is already running:
 
 ```bash
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs status
 ```
 
-6. Use staging without starting or opening Euphony only when Euphony is already running:
+7. Use staging without starting or opening Euphony only when Euphony is already running:
 
 ```bash
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs stage
@@ -77,7 +85,7 @@ Codex session files can contain private prompts, file paths, tool outputs, and s
 The staged local-codex path is needed for URL loading because browser pages cannot fetch arbitrary local files.
 To avoid the copy, use Euphony's `Load local file` button manually.
 
-7. Start Euphony when it is not running:
+8. Start Euphony when it is not running:
 
 ```bash
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs up
@@ -89,7 +97,7 @@ Use foreground startup only when explicitly useful for debugging:
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs start
 ```
 
-8. Verify with:
+9. Verify with:
 
 ```bash
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs status
@@ -97,7 +105,7 @@ node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs 
 
 Report the printed load URL to the user after `HTTP/1.1 200 OK`, or after the script reports that Euphony is listening.
 
-9. Stop Euphony when the user is done:
+10. Stop Euphony when the user is done:
 
 ```bash
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs stop
@@ -128,11 +136,12 @@ Do not tell the user to paste a local absolute path into Euphony's top URL box. 
 ```bash
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs list
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs latest
+node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs current
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs status
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs ensure
-node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs stage [session-jsonl]
-node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs url [session-jsonl]
-node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs open [session-jsonl]
+node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs stage [session-jsonl|session-id|current|latest]
+node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs url [session-jsonl|session-id|current|latest]
+node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs open [session-jsonl|session-id|current|latest]
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs up
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs start
 node ${CODEX_HOME:-$HOME/.codex}/skills/codex-euphony/scripts/codex-euphony.mjs stop

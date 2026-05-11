@@ -24,20 +24,28 @@ The script prefers a directly installed `pnpm`; if only Corepack is available, i
 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs latest
 ```
 
+Find the current CodeBuddy session:
+
+```bash
+${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs current
+```
+
+The script first tries CodeBuddy session/conversation/thread environment variables, then matches the current workspace path against CLI `cwd` or desktop `Workspace Folder` metadata. If neither can be resolved, commands without an explicit session path fall back to `latest`.
+
 For CodeBuddy CN desktop specifically, use:
 
 ```bash
 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs latest-desktop
 ```
 
-2. For normal user requests, stage and open the latest session:
+2. For normal user requests, stage and open the current session:
 
 ```bash
 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open
 ```
 
-This converts the newest CodeBuddy session, writes it to `$EUPHONY_DIR/public/local-codebuddy/latest.jsonl`, ensures Euphony is running, and opens a browser URL that loads that staged file.
-When the user explicitly wants the desktop app history, use `open-desktop` instead of `open`.
+This converts the current CodeBuddy session when it can be identified, writes it to `$EUPHONY_DIR/public/local-codebuddy/latest.jsonl`, ensures Euphony is running, and opens a browser URL that loads that staged file.
+When the user explicitly wants the newest desktop app history, use `open-desktop` instead of `open`.
 
 3. Use staging without opening the browser when only the URL is needed:
 
@@ -69,11 +77,12 @@ The stop command kills the Euphony process tracked by this script's pid file.
 ```bash
 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs latest
+${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs current
 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs latest-desktop
-${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs convert [session-path] [output-jsonl]
-${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs stage [session-path]
+${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs convert [session-path|session-id|current|latest] [output-jsonl]
+${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs stage [session-path|session-id|current|latest]
 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs stage-desktop
-${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open [session-path]
+${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open [session-path|session-id|current|latest]
 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open-desktop
 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs up
 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs start
@@ -88,6 +97,8 @@ Use environment overrides only when needed:
 EUPHONY_DIR=/path/to/euphony CODEBUDDY_HOME=/path/to/.codebuddy EUPHONY_PORT=3001 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs stage
 CODEBUDDY_INCLUDE_SUBAGENTS=1 ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
 CODEBUDDY_DESKTOP_DATA_DIR=/path/to/CodeBuddyExtension/Data ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
+CODEBUDDY_EUPHONY_SESSION_ID=<session-id> ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs current
+CODEBUDDY_WORKSPACE_DIR=/path/to/workspace ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs current
 ```
 
 If the default port responds but is not serving this checkout, use `EUPHONY_PORT=3001` or stop the other local Euphony server before running `open`.

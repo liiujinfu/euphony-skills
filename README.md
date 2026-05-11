@@ -130,22 +130,26 @@ You can also run the scripts directly.
 Codex:
 
 ```bash
+node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs current
 node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs open
 node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs status
 node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs stop
 ```
 
+`open`, `url`, and `stage` prefer the current Codex session when `CODEX_THREAD_ID` is available. They fall back to the newest session file if the current id cannot be resolved. You can also pass a session file path, full session id, `current`, or `latest`.
+
 CodeBuddy:
 
 ```bash
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
+~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs current
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open-desktop
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs status
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs stop
 ```
 
-`open` uses the newest CodeBuddy session across CLI and desktop sources. `open-desktop` forces the newest CodeBuddy CN desktop conversation.
+`open` prefers the current CodeBuddy session when a session/conversation/thread id or workspace path can be matched, then falls back to the newest CodeBuddy session across CLI and desktop sources. `open-desktop` forces the newest CodeBuddy CN desktop conversation.
 
 ## Runtime Behavior
 
@@ -203,6 +207,12 @@ If CodeBuddy desktop sessions do not appear in `list`, point the script at the d
 
 ```bash
 CODEBUDDY_DESKTOP_DATA_DIR="/path/to/CodeBuddyExtension/Data" ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
+```
+
+If CodeBuddy does not expose a session id to the skill process, pin current-session detection to the workspace:
+
+```bash
+CODEBUDDY_WORKSPACE_DIR="/path/to/workspace" ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs current
 ```
 
 If `npm` reports cache permission errors, use a temporary cache or repair the npm cache ownership:

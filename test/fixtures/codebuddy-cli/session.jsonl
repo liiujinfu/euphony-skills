@@ -1,4 +1,4 @@
-{"timestamp":"2026-05-09T08:00:00.000Z","type":"message","id":"cli-user-1","role":"user","sessionId":"cli-session","cwd":"/tmp/codebuddy-cli","content":[{"type":"text","text":"hello cli"}],"providerData":{"model":"Auto"}}
+{"timestamp":"2026-05-09T08:00:00.000Z","type":"message","id":"cli-user-1","role":"user","sessionId":"cli-session","cwd":"/tmp/codebuddy-cli","content":[{"type":"text","text":"hello cli"}],"providerData":{"model":"ep-test123"}}
 {"timestamp":"2026-05-09T08:00:01.000Z","type":"function_call","id":"cli-call-1","name":"execute_command","callId":"call_cli_1","arguments":{"command":"echo cli"},"status":"completed"}
 {"timestamp":"2026-05-09T08:00:02.000Z","type":"function_call_result","id":"cli-result-1","name":"execute_command","callId":"call_cli_1","output":{"result":{"stdout":"cli\n","stderr":"","exitCode":0}}}
 {"timestamp":"2026-05-09T08:00:03.000Z","type":"function_call","id":"cli-skill-call-1","name":"Skill","callId":"call_cli_skill_1","arguments":"{\"args\":\"探索直播间相关的流程\",\"skill\":\"gitnexus-exploring\"}","status":"completed"}

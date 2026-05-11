@@ -16,6 +16,7 @@ const runDir = process.env.EUPHONY_RUN_DIR || path.join(euphonyDir, '.codex-euph
 const maxLines = process.env.EUPHONY_FRONTEND_ONLY_MAX_LINES || '100000';
 const stageMode = process.env.EUPHONY_STAGE_MODE || (isWindows ? 'copy' : 'symlink');
 const eventLimit = Number.parseInt(process.env.CODEX_EUPHONY_EVENT_LIMIT || '500', 10);
+const currentSessionId = process.env.CODEX_EUPHONY_SESSION_ID || process.env.CODEX_SESSION_ID || process.env.CODEX_THREAD_ID || '';
 const stagedDir = path.join(euphonyDir, 'public', 'local-codex');
 const stagedJsonl = path.join(stagedDir, 'latest.jsonl');
 const stagedSource = path.join(stagedDir, 'latest-source.txt');
@@ -40,11 +41,12 @@ function usage() {
 Commands:
   list             List recent Codex session JSONL files.
   latest           Print the newest Codex session JSONL path.
+  current          Print the current Codex session JSONL path when CODEX_THREAD_ID is available.
   status           Check whether Euphony responds.
   ensure           Ensure the Euphony runtime checkout and dependencies exist.
-  stage [file]     Stage a session JSONL into Euphony public/local-codex/latest.jsonl and print a load URL.
-  url [file]       Ensure Euphony is running, stage a session, and print the load URL.
-  open [file]      Ensure Euphony is running, stage a session, and open the load URL in the browser.
+  stage [file|id]  Stage a session JSONL into Euphony public/local-codex/latest.jsonl and print a load URL.
+  url [file|id]    Ensure Euphony is running, stage a session, and print the load URL.
+  open [file|id]   Ensure Euphony is running, stage a session, and open the load URL in the browser.
   up               Start Euphony in the background if it is not already running.
   start            Start Euphony Vite dev server in the foreground.
   stop             Stop the Euphony Vite server started by this script.
@@ -61,6 +63,8 @@ Environment:
   EUPHONY_STAGE_MODE   Default: ${isWindows ? 'copy on Windows, symlink elsewhere' : 'symlink'}
   EUPHONY_FRONTEND_ONLY_MAX_LINES
                        Default: 100000
+  CODEX_EUPHONY_SESSION_ID
+                       Optional session id override. Defaults to CODEX_SESSION_ID or CODEX_THREAD_ID.
   CODEX_EUPHONY_EVENT_LIMIT
                        Default: 500. Use 0 to stage the full JSONL.`);
 }
@@ -102,6 +106,58 @@ function latestSession() {
   return latest.file;
 }
 
+function sessionMetaId(file) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const buffer = Buffer.alloc(1024 * 1024);
+      const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+      const firstLine = buffer.subarray(0, bytesRead).toString('utf8').split(/\r?\n/, 1)[0];
+      if (!firstLine.trim()) return '';
+      const event = JSON.parse(firstLine);
+      return typeof event?.payload?.id === 'string' ? event.payload.id : '';
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return '';
+  }
+}
+
+function findSessionById(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return null;
+  const matches = recentSessions().filter(({ file }) => {
+    const basename = path.basename(file, '.jsonl');
+    return basename.includes(id) || sessionMetaId(file) === id;
+  });
+  return matches[0]?.file || null;
+}
+
+function currentSession() {
+  if (!currentSessionId) return null;
+  return findSessionById(currentSessionId);
+}
+
+function defaultSession() {
+  return currentSession() || latestSession();
+}
+
+function resolveSessionInput(input) {
+  if (!input) return defaultSession();
+  if (input === 'current') {
+    const current = currentSession();
+    if (!current) fail(`Current Codex session was not found for id: ${currentSessionId || '[missing CODEX_THREAD_ID]'}`);
+    return current;
+  }
+  if (input === 'latest') return latestSession();
+  const resolved = path.resolve(input);
+  if (fs.existsSync(resolved)) return resolved;
+  const matched = findSessionById(input);
+  if (matched) return matched;
+  fail(`Session file or id not found: ${input}`);
+}
+
 function readStagedLines(source) {
   const lines = fs.readFileSync(source, 'utf8').split(/\r?\n/).filter(Boolean);
   if (!Number.isFinite(eventLimit) || eventLimit <= 0 || lines.length <= eventLimit) {
@@ -133,9 +189,9 @@ function writeStagedCopy(source) {
   fs.writeFileSync(stagedJsonl, `${readStagedLines(source).join('\n')}\n`);
 }
 
-function stageSession(input = latestSession()) {
+function stageSession(input) {
   runtime.ensureEuphonyDir();
-  const source = path.resolve(input);
+  const source = resolveSessionInput(input);
   if (!fs.existsSync(source)) fail(`Session file not found: ${source}`);
   fs.mkdirSync(stagedDir, { recursive: true });
   if (eventLimit > 0) {
@@ -160,7 +216,7 @@ function stageSession(input = latestSession()) {
 
 async function openCommand(input) {
   await runtime.up();
-  const url = stageSession(input || latestSession());
+  const url = stageSession(input);
   runtime.openBrowser(url);
   console.log(`Opened: ${url}`);
 }
@@ -177,6 +233,12 @@ async function main() {
     case 'latest':
       console.log(latestSession());
       break;
+    case 'current': {
+      const current = currentSession();
+      if (!current) fail(`Current Codex session was not found for id: ${currentSessionId || '[missing CODEX_THREAD_ID]'}`);
+      console.log(current);
+      break;
+    }
     case 'status':
       await runtime.status();
       break;
@@ -185,11 +247,11 @@ async function main() {
       console.log(`Euphony is ready at ${euphonyDir}`);
       break;
     case 'stage':
-      stageSession(arg1 || latestSession());
+      stageSession(arg1);
       break;
     case 'url':
       await runtime.up();
-      stageSession(arg1 || latestSession());
+      stageSession(arg1);
       break;
     case 'open':
       await openCommand(arg1);

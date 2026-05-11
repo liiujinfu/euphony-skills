@@ -130,22 +130,26 @@ Open this CodeBuddy conversation in Euphony.
 Codex：
 
 ```bash
+node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs current
 node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs open
 node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs status
 node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs stop
 ```
 
+`open`、`url` 和 `stage` 会在 `CODEX_THREAD_ID` 可用时优先打开当前 Codex 会话；如果解析不到当前 id，则回退到最新会话文件。也可以显式传入会话文件路径、完整 session id、`current` 或 `latest`。
+
 CodeBuddy：
 
 ```bash
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
+~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs current
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open-desktop
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs status
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs stop
 ```
 
-`open` 会打开 CLI 和桌面端来源里最新的 CodeBuddy 会话；`open-desktop` 会强制打开最新的 CodeBuddy CN 桌面端会话。
+`open` 会优先匹配当前 CodeBuddy 会话：先按 session/conversation/thread id，再按工作区路径；解析不到时回退到 CLI 和桌面端来源里最新的 CodeBuddy 会话。`open-desktop` 会强制打开最新的 CodeBuddy CN 桌面端会话。
 
 ## 运行时行为
 
@@ -203,6 +207,12 @@ npx @jefferylau/euphony-skills doctor
 
 ```bash
 CODEBUDDY_DESKTOP_DATA_DIR="/path/to/CodeBuddyExtension/Data" ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
+```
+
+如果 CodeBuddy 没有把会话 id 暴露给 skill 进程，可以用工作区路径固定当前会话识别：
+
+```bash
+CODEBUDDY_WORKSPACE_DIR="/path/to/workspace" ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs current
 ```
 
 如果 `npm` 报 cache 权限错误，可以使用临时 cache，或修复 npm cache 目录权限：
