@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const script = path.join(rootDir, 'skills', 'codebuddy-euphony', 'scripts', 'codebuddy-euphony.mjs');
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'euphony-skills-test-'));
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function readJsonl(file) {
+  return fs.readFileSync(file, 'utf8').trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+}
+
+function convert(input, outputName) {
+  const output = path.join(tempDir, outputName);
+  execFileSync(process.execPath, [script, 'convert', input, output], {
+    cwd: rootDir,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  return readJsonl(output);
+}
+
+const cliRows = convert(
+  path.join(rootDir, 'test', 'fixtures', 'codebuddy-cli', 'session.jsonl'),
+  'cli.jsonl'
+);
+assert(cliRows.some(row => row.payload?.type === 'message' && row.payload.content?.[0]?.text === 'hello cli'), 'CLI message was not converted.');
+assert(cliRows.some(row => row.type === 'session_meta' && row.payload?.session_label === 'CodeBuddy session'), 'CLI session label was not set.');
+assert(cliRows.some(row => row.payload?.type === 'function_call' && row.payload.name === 'exec_command'), 'CLI execute_command was not normalized.');
+assert(cliRows.some(row => row.payload?.type === 'function_call_output' && row.payload.output === 'cli'), 'CLI command output was not simplified.');
+assert(
+  cliRows.some(
+    row =>
+      row.payload?.type === 'custom_tool_call' &&
+      row.payload.name === 'Skill' &&
+      row.payload.input.includes('"skill": "gitnexus-exploring"') &&
+      !row.payload.input.includes('\\"skill\\"')
+  ),
+  'CLI custom tool JSON string arguments were not normalized.'
+);
+
+const desktopRows = convert(
+  path.join(rootDir, 'test', 'fixtures', 'codebuddy-desktop', 'conversation-1'),
+  'desktop.jsonl'
+);
+const desktopText = desktopRows.map(row => row.payload?.content?.[0]?.text || row.payload?.output || '').join('\n');
+assert(desktopText.includes('/codebuddy-euphony\n 打开桌面端，'), 'Desktop resource_link did not render as display text.');
+assert(!desktopText.includes('[resource_link]'), 'Desktop resource_link placeholder leaked into output.');
+assert(!desktopText.includes('Injected context should not be shown'), 'Desktop sourceContentBlocks did not override injected content.');
+assert(desktopRows.some(row => row.payload?.type === 'function_call' && row.payload.name === 'exec_command'), 'Desktop tool call was not converted.');
+assert(desktopRows.some(row => row.payload?.type === 'function_call_output' && row.payload.output === '/tmp/codebuddy-desktop'), 'Desktop tool result was not converted.');
+
+console.log('CodeBuddy conversion fixtures passed.');

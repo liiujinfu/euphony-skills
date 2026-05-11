@@ -7,9 +7,9 @@ Install local Euphony viewer skills for Codex and CodeBuddy.
 This repository contains two independent skills with one npm-based installer:
 
 - `skills/codex-euphony`: opens local Codex session JSONL logs in OpenAI Euphony.
-- `skills/codebuddy-euphony`: converts local CodeBuddy session JSONL logs into an Euphony-compatible shape and opens them in OpenAI Euphony.
+- `skills/codebuddy-euphony`: converts local CodeBuddy CLI JSONL logs and CodeBuddy CN desktop history into an Euphony-compatible shape and opens them in OpenAI Euphony.
 
-Each skill directory is self-contained, so it can still be installed by path. The npm CLI is the recommended install path because it handles both host applications consistently.
+The npm CLI is the recommended install path because it installs the selected skill plus the shared local Euphony runtime helper used by both host applications.
 
 ## Requirements
 
@@ -138,19 +138,25 @@ node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs stop
 CodeBuddy:
 
 ```bash
+~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open
+~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open-desktop
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs status
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs stop
 ```
 
+`open` uses the newest CodeBuddy session across CLI and desktop sources. `open-desktop` forces the newest CodeBuddy CN desktop conversation.
+
 ## Runtime Behavior
 
-The installer only copies or links skill folders. It does not copy session logs, generated JSONL files, local caches, or Euphony checkouts.
+The installer only copies or links skill source folders and their shared runtime helper. It does not copy session logs, generated JSONL files, local caches, or Euphony checkouts.
 
 At runtime:
 
 - Codex uses `${CODEX_HOME:-~/.codex}/cache/euphony`.
 - CodeBuddy uses `${CODEBUDDY_HOME:-~/.codebuddy}/cache/euphony`.
+- CodeBuddy CLI sessions are read from `${CODEBUDDY_HOME:-~/.codebuddy}/projects`.
+- CodeBuddy CN desktop sessions are read from `CodeBuddyExtension/Data` under the OS application data directory. Set `CODEBUDDY_DESKTOP_DATA_DIR` if the desktop app stores data elsewhere.
 - If the cache is deleted, the skill recreates it on the next command that needs Euphony.
 - The local Euphony server binds to `127.0.0.1`.
 - The default port is `3000`.
@@ -173,9 +179,9 @@ node "$env:USERPROFILE\.codex\skills\codex-euphony\scripts\codex-euphony.mjs" op
 
 ## Privacy
 
-Session JSONL files can contain prompts, paths, tool output, and secrets that appeared in conversations. The skills serve staged session data only from a local `127.0.0.1` Euphony instance.
+Session files can contain prompts, paths, tool output, and secrets that appeared in conversations. The skills serve staged session data only from a local `127.0.0.1` Euphony instance.
 
-Do not commit generated session files, staged JSONL output, `.env` files, or Euphony cache directories. This repository's package contents are limited to the CLI, README files, LICENSE, and skill source files.
+Do not commit generated session files, staged JSONL output, `.env` files, or Euphony cache directories. This repository's package contents are limited to the CLI, README files, LICENSE, skill source files, and shared runtime helper.
 
 ## Troubleshooting
 
@@ -191,6 +197,12 @@ If Euphony fails to start, check prerequisites:
 
 ```bash
 npx @jefferylau/euphony-skills doctor
+```
+
+If CodeBuddy desktop sessions do not appear in `list`, point the script at the desktop data directory:
+
+```bash
+CODEBUDDY_DESKTOP_DATA_DIR="/path/to/CodeBuddyExtension/Data" ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
 ```
 
 If `npm` reports cache permission errors, use a temporary cache or repair the npm cache ownership:

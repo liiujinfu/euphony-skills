@@ -1,0 +1,21 @@
+{
+  "messages": [
+    {
+      "id": "desktop-user-1",
+      "role": "user"
+    },
+    {
+      "id": "desktop-assistant-1",
+      "role": "assistant"
+    }
+  ],
+  "requests": [
+    {
+      "startedAt": 1780000000000,
+      "messages": [
+        "desktop-user-1",
+        "desktop-assistant-1"
+      ]
+    }
+  ]
+}

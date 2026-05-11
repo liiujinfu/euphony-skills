@@ -7,9 +7,9 @@
 这个仓库包含两个独立 skill，并提供一个 npm 安装器：
 
 - `skills/codex-euphony`：用 OpenAI Euphony 打开本地 Codex 会话 JSONL。
-- `skills/codebuddy-euphony`：把本地 CodeBuddy 会话 JSONL 转成 Euphony 兼容格式后打开。
+- `skills/codebuddy-euphony`：把本地 CodeBuddy CLI JSONL 和 CodeBuddy CN 桌面端历史转成 Euphony 兼容格式后打开。
 
-每个 skill 目录都是自包含的，也可以按路径单独安装。推荐使用 npm CLI，因为它能统一处理 Codex 和 CodeBuddy 两种宿主。
+推荐使用 npm CLI 安装，因为它会同时安装选中的 skill 和两个宿主共用的本地 Euphony 运行时 helper。
 
 ## 环境要求
 
@@ -138,19 +138,25 @@ node ~/.codex/skills/codex-euphony/scripts/codex-euphony.mjs stop
 CodeBuddy：
 
 ```bash
+~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open
+~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs open-desktop
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs status
 ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs stop
 ```
 
+`open` 会打开 CLI 和桌面端来源里最新的 CodeBuddy 会话；`open-desktop` 会强制打开最新的 CodeBuddy CN 桌面端会话。
+
 ## 运行时行为
 
-安装器只复制或链接 skill 目录，不会复制会话日志、生成的 JSONL、本地缓存或 Euphony checkout。
+安装器只复制或链接 skill 源码目录及其共享运行时 helper，不会复制会话日志、生成的 JSONL、本地缓存或 Euphony checkout。
 
 运行时：
 
 - Codex 使用 `${CODEX_HOME:-~/.codex}/cache/euphony`。
 - CodeBuddy 使用 `${CODEBUDDY_HOME:-~/.codebuddy}/cache/euphony`。
+- CodeBuddy CLI 会话从 `${CODEBUDDY_HOME:-~/.codebuddy}/projects` 读取。
+- CodeBuddy CN 桌面端会话从系统应用数据目录下的 `CodeBuddyExtension/Data` 读取。如果桌面端数据不在默认位置，可以设置 `CODEBUDDY_DESKTOP_DATA_DIR`。
 - 如果缓存被删除，下一次需要 Euphony 时会自动重建。
 - 本地 Euphony 服务绑定到 `127.0.0.1`。
 - 默认端口是 `3000`。
@@ -173,9 +179,9 @@ node "$env:USERPROFILE\.codex\skills\codex-euphony\scripts\codex-euphony.mjs" op
 
 ## 隐私
 
-会话 JSONL 可能包含提示词、路径、工具输出，以及对话中出现过的敏感信息。skill 只会通过本地 `127.0.0.1` Euphony 实例提供临时 staged 数据。
+会话文件可能包含提示词、路径、工具输出，以及对话中出现过的敏感信息。skill 只会通过本地 `127.0.0.1` Euphony 实例提供临时 staged 数据。
 
-不要提交生成的会话文件、staged JSONL 输出、`.env` 文件或 Euphony 缓存目录。这个仓库的 npm 包内容只包含 CLI、README、LICENSE 和 skill 源码。
+不要提交生成的会话文件、staged JSONL 输出、`.env` 文件或 Euphony 缓存目录。这个仓库的 npm 包内容只包含 CLI、README、LICENSE、skill 源码和共享运行时 helper。
 
 ## 排错
 
@@ -191,6 +197,12 @@ npx @jefferylau/euphony-skills install codebuddy --force
 
 ```bash
 npx @jefferylau/euphony-skills doctor
+```
+
+如果 `list` 看不到 CodeBuddy 桌面端会话，可以手动指定桌面端数据目录：
+
+```bash
+CODEBUDDY_DESKTOP_DATA_DIR="/path/to/CodeBuddyExtension/Data" ~/.codebuddy/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs list
 ```
 
 如果 `npm` 报 cache 权限错误，可以使用临时 cache，或修复 npm cache 目录权限：

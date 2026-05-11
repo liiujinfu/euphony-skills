@@ -1,0 +1,6 @@
+{
+  "id": "desktop-assistant-1",
+  "role": "assistant",
+  "message": "{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"ready\"},{\"type\":\"tool-call\",\"toolName\":\"execute_command\",\"toolCallId\":\"call_desktop_1\",\"args\":{\"command\":\"pwd\"}},{\"type\":\"tool-result\",\"toolName\":\"execute_command\",\"toolCallId\":\"call_desktop_1\",\"result\":{\"result\":{\"stdout\":\"/tmp/codebuddy-desktop\\n\",\"stderr\":\"\",\"exitCode\":0}}}]}",
+  "extra": "{\"requestId\":\"request-1\",\"modelName\":\"Auto\"}"
+}

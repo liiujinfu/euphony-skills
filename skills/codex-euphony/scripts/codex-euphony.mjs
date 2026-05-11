@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { createEuphonyRuntime } from '../../_shared/euphony-runtime.mjs';
 
 const isWindows = process.platform === 'win32';
 const home = os.homedir();
@@ -13,15 +12,27 @@ const euphonyDir = process.env.EUPHONY_DIR || path.join(codexHome, 'cache', 'eup
 const euphonyRepo = process.env.EUPHONY_REPO || 'https://github.com/openai/euphony.git';
 const host = process.env.EUPHONY_HOST || '127.0.0.1';
 const port = Number(process.env.EUPHONY_PORT || '3000');
-const baseUrl = `http://${host}:${port}/`;
 const runDir = process.env.EUPHONY_RUN_DIR || path.join(euphonyDir, '.codex-euphony');
-const pidFile = path.join(runDir, 'vite.pid');
-const logFile = path.join(runDir, 'vite.log');
 const maxLines = process.env.EUPHONY_FRONTEND_ONLY_MAX_LINES || '100000';
 const stageMode = process.env.EUPHONY_STAGE_MODE || (isWindows ? 'copy' : 'symlink');
+const eventLimit = Number.parseInt(process.env.CODEX_EUPHONY_EVENT_LIMIT || '500', 10);
 const stagedDir = path.join(euphonyDir, 'public', 'local-codex');
 const stagedJsonl = path.join(stagedDir, 'latest.jsonl');
 const stagedSource = path.join(stagedDir, 'latest-source.txt');
+
+const runtime = createEuphonyRuntime({
+  euphonyDir,
+  euphonyRepo,
+  host,
+  port,
+  runDir,
+  maxLines,
+  frontendLimitComment: [
+    'Codex rollout files are event streams and routinely exceed 100 lines, so keep',
+    'the default high while allowing local deployments to lower it.'
+  ]
+});
+const { baseUrl } = runtime;
 
 function usage() {
   console.log(`Usage: ${path.basename(process.argv[1])} <command> [session-jsonl]
@@ -49,7 +60,9 @@ Environment:
   EUPHONY_REPO         Default: https://github.com/openai/euphony.git
   EUPHONY_STAGE_MODE   Default: ${isWindows ? 'copy on Windows, symlink elsewhere' : 'symlink'}
   EUPHONY_FRONTEND_ONLY_MAX_LINES
-                       Default: 100000`);
+                       Default: 100000
+  CODEX_EUPHONY_EVENT_LIMIT
+                       Default: 500. Use 0 to stage the full JSONL.`);
 }
 
 function fail(message) {
@@ -57,120 +70,10 @@ function fail(message) {
   process.exit(1);
 }
 
-function commandExists(command) {
-  try {
-    if (isWindows) {
-      execFileSync('where', [command], { stdio: 'ignore', shell: true });
-    } else {
-      execFileSync('which', [command], { stdio: 'ignore' });
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function requireCommand(command) {
-  if (!commandExists(command)) fail(`${command} is required for this command.`);
-}
-
-function run(command, args, options = {}) {
-  return execFileSync(command, args, {
-    ...options,
-    shell: isWindows && command === 'corepack',
-    stdio: options.stdio || 'inherit'
-  });
-}
-
-function packageRunner() {
-  if (commandExists('pnpm')) {
-    return { command: 'pnpm', argsPrefix: [], env: process.env, shell: isWindows };
-  }
-  requireCommand('corepack');
-  return {
-    command: 'corepack',
-    argsPrefix: ['pnpm'],
-    env: {
-      ...process.env,
-      COREPACK_INTEGRITY_KEYS: process.env.COREPACK_INTEGRITY_KEYS || '0'
-    },
-    shell: isWindows
-  };
-}
-
-function runPnpm(args, options = {}) {
-  const runner = packageRunner();
-  if (runner.command === 'corepack' && !process.env.COREPACK_INTEGRITY_KEYS) {
-    console.log('Using Corepack with COREPACK_INTEGRITY_KEYS=0 to avoid known pnpm signature bootstrap failures.');
-  }
-  return execFileSync(runner.command, [...runner.argsPrefix, ...args], {
-    ...options,
-    env: runner.env,
-    shell: runner.shell,
-    stdio: options.stdio || 'inherit'
-  });
-}
-
-function spawnPnpm(args, options = {}) {
-  const runner = packageRunner();
-  return spawn(runner.command, [...runner.argsPrefix, ...args], {
-    ...options,
-    env: {
-      ...runner.env,
-      ...(options.env || {})
-    },
-    shell: runner.shell
-  });
-}
-
 function requireSessionsDir() {
   if (!fs.existsSync(sessionsDir) || !fs.statSync(sessionsDir).isDirectory()) {
     fail(`Codex sessions directory not found: ${sessionsDir}`);
   }
-}
-
-function patchEuphonyFrontendLimit() {
-  const apiManager = path.join(euphonyDir, 'src', 'utils', 'api-manager.ts');
-  if (!fs.existsSync(apiManager)) return;
-  const oldText = fs.readFileSync(apiManager, 'utf8');
-  if (oldText.includes('VITE_EUPHONY_FRONTEND_ONLY_MAX_LINES')) return;
-  const needle =
-    '// The maximum number of lines in a JSONL file to read in frontend-only mode\nconst FRONTEND_ONLY_MODE_MAX_LINES = 100;';
-  if (!oldText.includes(needle)) return;
-  const replacement =
-    "// The maximum number of lines in a JSONL file to read in frontend-only mode.\n" +
-    '// Codex rollout files are event streams and routinely exceed 100 lines, so keep\n' +
-    '// the default high while allowing local deployments to lower it.\n' +
-    'const FRONTEND_ONLY_MODE_MAX_LINES = Number.parseInt(\n' +
-    "  (import.meta.env.VITE_EUPHONY_FRONTEND_ONLY_MAX_LINES as string) || '100000',\n" +
-    '  10\n' +
-    ');';
-  fs.writeFileSync(apiManager, oldText.replace(needle, replacement));
-}
-
-function ensureEuphonyDir() {
-  const packageJson = path.join(euphonyDir, 'package.json');
-  if (fs.existsSync(packageJson)) {
-    patchEuphonyFrontendLimit();
-    if (!fs.existsSync(path.join(euphonyDir, 'node_modules'))) {
-      console.log(`Installing Euphony dependencies in ${euphonyDir}...`);
-      runPnpm(['install'], { cwd: euphonyDir });
-    }
-    return;
-  }
-
-  if (fs.existsSync(euphonyDir)) {
-    fail(`EUPHONY_DIR exists but is not an Euphony checkout: ${euphonyDir}
-Remove it or set EUPHONY_DIR to another path.`);
-  }
-
-  requireCommand('git');
-  fs.mkdirSync(path.dirname(euphonyDir), { recursive: true });
-  console.log(`Cloning Euphony into ${euphonyDir}...`);
-  run('git', ['clone', euphonyRepo, euphonyDir]);
-  patchEuphonyFrontendLimit();
-  console.log(`Installing Euphony dependencies in ${euphonyDir}...`);
-  runPnpm(['install'], { cwd: euphonyDir });
 }
 
 function walkJsonlFiles(dir, out = []) {
@@ -199,216 +102,66 @@ function latestSession() {
   return latest.file;
 }
 
+function readStagedLines(source) {
+  const lines = fs.readFileSync(source, 'utf8').split(/\r?\n/).filter(Boolean);
+  if (!Number.isFinite(eventLimit) || eventLimit <= 0 || lines.length <= eventLimit) {
+    return lines;
+  }
+
+  const metadataLines = [];
+  const metadataIndexes = new Set();
+  for (let index = 0; index < lines.length; index += 1) {
+    try {
+      const event = JSON.parse(lines[index]);
+      if (event?.type === 'session_meta' || event?.type === 'turn_context') {
+        metadataLines.push(lines[index]);
+        metadataIndexes.add(index);
+      }
+    } catch {
+      // Leave malformed rows eligible for tailing; Euphony skips bad JSONL rows.
+    }
+  }
+
+  const tailLines = [];
+  for (let index = Math.max(0, lines.length - eventLimit); index < lines.length; index += 1) {
+    if (!metadataIndexes.has(index)) tailLines.push(lines[index]);
+  }
+  return [...metadataLines, ...tailLines];
+}
+
+function writeStagedCopy(source) {
+  fs.writeFileSync(stagedJsonl, `${readStagedLines(source).join('\n')}\n`);
+}
+
 function stageSession(input = latestSession()) {
-  ensureEuphonyDir();
+  runtime.ensureEuphonyDir();
   const source = path.resolve(input);
   if (!fs.existsSync(source)) fail(`Session file not found: ${source}`);
   fs.mkdirSync(stagedDir, { recursive: true });
-  if (stageMode === 'symlink') {
+  if (eventLimit > 0) {
+    writeStagedCopy(source);
+  } else if (stageMode === 'symlink') {
     try {
       fs.rmSync(stagedJsonl, { force: true });
       fs.symlinkSync(source, stagedJsonl, 'file');
     } catch {
-      fs.copyFileSync(source, stagedJsonl);
+      writeStagedCopy(source);
     }
   } else {
-    fs.copyFileSync(source, stagedJsonl);
+    writeStagedCopy(source);
   }
   fs.writeFileSync(stagedSource, `${source}\n`);
   const url = `${baseUrl}?path=${baseUrl}local-codex/latest.jsonl&no-cache=true`;
   console.log(`Staged: ${source}`);
+  if (eventLimit > 0) console.log(`Event limit: latest ${eventLimit} events plus session metadata`);
   console.log(`Open: ${url}`);
   return url;
 }
 
-function requestHead(url, timeoutMs = 2000) {
-  return new Promise(resolve => {
-    const request = http.request(url, { method: 'HEAD', timeout: timeoutMs }, response => {
-      response.resume();
-      resolve(response.statusCode >= 200 && response.statusCode < 500);
-    });
-    request.on('timeout', () => {
-      request.destroy();
-      resolve(false);
-    });
-    request.on('error', () => resolve(false));
-    request.end();
-  });
-}
-
-function readTrackedPid() {
-  if (!fs.existsSync(pidFile)) return null;
-  const text = fs.readFileSync(pidFile, 'utf8').trim();
-  if (!/^\d+$/.test(text)) return null;
-  return Number(text);
-}
-
-function pidExists(pid) {
-  if (!pid) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function trackedPid() {
-  const pid = readTrackedPid();
-  return pidExists(pid) ? pid : null;
-}
-
-function legacyCheckoutPids() {
-  if (isWindows || !commandExists('lsof')) return [];
-  try {
-    const output = execFileSync('lsof', ['-nP', `-tiTCP:${port}`, '-sTCP:LISTEN'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore']
-    });
-    return output
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .filter(pid => {
-        try {
-          const cwdOutput = execFileSync('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'ignore']
-          });
-          const cwd = cwdOutput
-            .split(/\r?\n/)
-            .find(line => line.startsWith('n'))
-            ?.slice(1);
-          return cwd === euphonyDir;
-        } catch {
-          return false;
-        }
-      })
-      .map(Number);
-  } catch {
-    return [];
-  }
-}
-
-function trackedOrAdoptedPid() {
-  const pid = trackedPid();
-  if (pid) return pid;
-  const [legacyPid] = legacyCheckoutPids();
-  if (!legacyPid) return null;
-  fs.mkdirSync(runDir, { recursive: true });
-  fs.writeFileSync(pidFile, `${legacyPid}\n`);
-  return legacyPid;
-}
-
-function startViteBackground() {
-  fs.mkdirSync(runDir, { recursive: true });
-  const logFd = fs.openSync(logFile, 'a');
-  const child = spawnPnpm(['exec', 'vite', '--host', host, '--port', String(port)], {
-    cwd: euphonyDir,
-    detached: true,
-    env: {
-      VITE_EUPHONY_FRONTEND_ONLY: 'true',
-      VITE_EUPHONY_FRONTEND_ONLY_MAX_LINES: maxLines
-    },
-    stdio: ['ignore', logFd, logFd]
-  });
-  child.unref();
-  fs.writeFileSync(pidFile, `${child.pid}\n`);
-}
-
-async function up() {
-  const existingPid = trackedOrAdoptedPid();
-  if (await requestHead(baseUrl)) {
-    if (existingPid) {
-      ensureEuphonyDir();
-      console.log(`Euphony responds at ${baseUrl}`);
-      console.log(`PID: ${existingPid}`);
-      return;
-    }
-    fail(`Port ${port} responds at ${baseUrl}, but this script has no live pid file for it.
-Stop the other server or set EUPHONY_PORT to another value.`);
-  }
-  ensureEuphonyDir();
-  if (!existingPid) startViteBackground();
-  console.log(`Starting Euphony at ${baseUrl}`);
-  console.log(`Log: ${logFile}`);
-  for (let i = 0; i < 300; i += 1) {
-    if (await requestHead(baseUrl)) {
-      console.log(`Euphony is ready at ${baseUrl}`);
-      return;
-    }
-    await new Promise(resolve => setTimeout(resolve, 200));
-  }
-  fail(`Euphony did not respond at ${baseUrl}. Check ${logFile}`);
-}
-
-async function startForeground() {
-  ensureEuphonyDir();
-  const child = spawnPnpm(['exec', 'vite', '--host', host, '--port', String(port)], {
-    cwd: euphonyDir,
-    env: {
-      VITE_EUPHONY_FRONTEND_ONLY: 'true',
-      VITE_EUPHONY_FRONTEND_ONLY_MAX_LINES: maxLines
-    },
-    stdio: 'inherit'
-  });
-  child.on('exit', code => process.exit(code ?? 0));
-}
-
-function killProcessTree(pid) {
-  if (isWindows) {
-    execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', shell: true });
-  } else {
-    process.kill(pid, 'SIGTERM');
-  }
-}
-
-function stop() {
-  const pid = trackedOrAdoptedPid();
-  if (!pid) {
-    if (fs.existsSync(pidFile)) fs.rmSync(pidFile, { force: true });
-    console.log('No tracked Euphony process found.');
-    return;
-  }
-  try {
-    killProcessTree(pid);
-    console.log(`Stopped PID ${pid}`);
-  } catch (error) {
-    console.log(`Could not stop PID ${pid}: ${error.message}`);
-  }
-  fs.rmSync(pidFile, { force: true });
-}
-
-async function status() {
-  const pid = trackedOrAdoptedPid();
-  if (await requestHead(baseUrl)) {
-    if (pid) {
-      console.log(`Euphony responds at ${baseUrl}`);
-      console.log(`PID: ${pid}`);
-      return;
-    }
-    console.log(`Port ${port} responds at ${baseUrl}, but this script has no live pid file for it.`);
-    process.exitCode = 1;
-    return;
-  }
-  console.log(`Euphony is not responding at ${baseUrl}`);
-  if (pid) console.log(`Tracked PID exists but HTTP is not ready: ${pid}`);
-  process.exitCode = 1;
-}
-
-function openBrowser(url) {
-  const command = process.platform === 'darwin' ? 'open' : isWindows ? 'cmd' : 'xdg-open';
-  const args = isWindows ? ['/c', 'start', '', url] : [url];
-  const child = spawn(command, args, { detached: true, stdio: 'ignore', shell: false });
-  child.on('error', () => {
-    console.log(`Open this URL in a browser: ${url}`);
-  });
-  child.unref();
-}
-
 async function openCommand(input) {
-  await up();
+  await runtime.up();
   const url = stageSession(input || latestSession());
-  openBrowser(url);
+  runtime.openBrowser(url);
   console.log(`Opened: ${url}`);
 }
 
@@ -425,34 +178,34 @@ async function main() {
       console.log(latestSession());
       break;
     case 'status':
-      await status();
+      await runtime.status();
       break;
     case 'ensure':
-      ensureEuphonyDir();
+      runtime.ensureEuphonyDir();
       console.log(`Euphony is ready at ${euphonyDir}`);
       break;
     case 'stage':
       stageSession(arg1 || latestSession());
       break;
     case 'url':
-      await up();
+      await runtime.up();
       stageSession(arg1 || latestSession());
       break;
     case 'open':
       await openCommand(arg1);
       break;
     case 'up':
-      await up();
+      await runtime.up();
       break;
     case 'start':
-      await startForeground();
+      await runtime.startForeground();
       break;
     case 'stop':
-      stop();
+      runtime.stop();
       break;
     case 'restart':
-      stop();
-      await up();
+      runtime.stop();
+      await runtime.up();
       break;
     case 'help':
     case '--help':

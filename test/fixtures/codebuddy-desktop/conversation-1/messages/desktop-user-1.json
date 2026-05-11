@@ -1,0 +1,6 @@
+{
+  "id": "desktop-user-1",
+  "role": "user",
+  "message": "{\"role\":\"user\",\"content\":\"Workspace Folder: /tmp/injected\\nInjected context should not be shown\"}",
+  "extra": "{\"requestId\":\"request-1\",\"modelName\":\"Auto\",\"sourceContentBlocks\":[{\"type\":\"resource_link\",\"name\":\"codebuddy-euphony\",\"uri\":\"command://codebuddy-euphony\",\"title\":\"/codebuddy-euphony\",\"_meta\":{\"displayText\":\"/codebuddy-euphony\"}},{\"type\":\"text\",\"text\":\" 打开桌面端，\"}]}"
+}
