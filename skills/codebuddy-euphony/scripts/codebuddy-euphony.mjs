@@ -48,6 +48,7 @@ const runtime = createEuphonyRuntime({
   euphonyRepo,
   host,
   port,
+  portCandidates: process.env.EUPHONY_PORT ? [] : [3001, 3002, 3003],
   runDir,
   maxLines,
   frontendLimitComment: [
@@ -55,7 +56,6 @@ const runtime = createEuphonyRuntime({
     'high while allowing local deployments to lower it.'
   ]
 });
-const { baseUrl } = runtime;
 const sessions = createCodeBuddySessionStore({
   projectsDir,
   desktopDataDir,
@@ -148,7 +148,8 @@ function convertCommand(input, output) {
   return outFile;
 }
 
-function stageCommand(input) {
+async function stageCommand(input) {
+  await runtime.selectUsablePort();
   runtime.ensureEuphonyDir();
   const session = sessions.normalizeSessionInput(resolveSessionInput(input));
   const converted = convertCodeBuddySessionToCodex(session);
@@ -156,11 +157,11 @@ function stageCommand(input) {
   fs.writeFileSync(stagedSource, `${session.source}\n`);
   console.log(`Staged: ${session.source}`);
   console.log(`Converted: ${stagedJsonl}`);
-  console.log(`Open: ${baseUrl}?path=${baseUrl}local-codebuddy/latest.jsonl&no-cache=true`);
+  console.log(`Open: ${loadUrl()}`);
 }
 
 async function verifyStagedJsonlIsServed() {
-  const url = `${baseUrl}local-codebuddy/latest.jsonl`;
+  const url = stagedJsonlUrl();
   let result = { ok: false, text: '' };
   for (let i = 0; i < 20; i += 1) {
     result = await runtime.requestTextPrefix(url);
@@ -169,16 +170,24 @@ async function verifyStagedJsonlIsServed() {
     await new Promise(resolve => setTimeout(resolve, 250));
   }
   const prefix = result.text.trimStart();
-  fail(`Euphony is responding at ${baseUrl}, but ${url} is not serving the staged JSONL.
+  fail(`Euphony is responding at ${runtime.baseUrl}, but ${url} is not serving the staged JSONL.
 Received: ${prefix.slice(0, 80) || '[empty response]'}
 Stop the other server or set EUPHONY_PORT to another value.`);
 }
 
+function stagedJsonlUrl() {
+  return `${runtime.baseUrl}local-codebuddy/latest.jsonl`;
+}
+
+function loadUrl() {
+  return `${runtime.baseUrl}?path=${stagedJsonlUrl()}&no-cache=true`;
+}
+
 async function openCommand(input) {
   await runtime.up();
-  stageCommand(input);
+  await stageCommand(input);
   await verifyStagedJsonlIsServed();
-  const url = `${baseUrl}?path=${baseUrl}local-codebuddy/latest.jsonl&no-cache=true`;
+  const url = loadUrl();
   runtime.openBrowser(url);
   console.log(`Opened: ${url}`);
 }
@@ -213,10 +222,10 @@ Workspace: ${currentWorkspace || '[not provided]'}`);
       convertCommand(arg1, arg2);
       break;
     case 'stage':
-      stageCommand(arg1);
+      await stageCommand(arg1);
       break;
     case 'stage-desktop':
-      stageCommand(sessions.latestSessionByType('desktop'));
+      await stageCommand(sessions.latestSessionByType('desktop'));
       break;
     case 'open':
       await openCommand(arg1);

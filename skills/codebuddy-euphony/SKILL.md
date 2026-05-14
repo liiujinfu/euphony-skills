@@ -46,6 +46,7 @@ ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-e
 
 This converts the current CodeBuddy session when it can be identified, writes it to `$EUPHONY_DIR/public/local-codebuddy/latest.jsonl`, ensures Euphony is running, and opens a browser URL that loads that staged file.
 When the user explicitly wants the newest desktop app history, use `open-desktop` instead of `open`.
+When `EUPHONY_PORT` is not set and the default port is already used by another checkout, the script automatically chooses the next available local port from `3001` through `3003`. The page URL and staged JSONL URL always use the same selected port.
 
 3. Use staging without opening the browser when only the URL is needed:
 
@@ -101,4 +102,4 @@ CODEBUDDY_EUPHONY_SESSION_ID=<session-id> ${CODEBUDDY_HOME:-$HOME/.codebuddy}/sk
 CODEBUDDY_WORKSPACE_DIR=/path/to/workspace ${CODEBUDDY_HOME:-$HOME/.codebuddy}/skills/codebuddy-euphony/scripts/codebuddy-euphony.mjs current
 ```
 
-If the default port responds but is not serving this checkout, use `EUPHONY_PORT=3001` or stop the other local Euphony server before running `open`.
+If you need a fixed port, set `EUPHONY_PORT`. Otherwise the script will avoid another local Euphony checkout automatically.

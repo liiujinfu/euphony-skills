@@ -119,4 +119,28 @@ const currentDesktop = execFileSync(process.execPath, [script, 'current'], {
 }).trim();
 assert(currentDesktop === desktopFixture, 'CodeBuddy current command did not select workspace match.');
 
+const fakeEuphonyDir = path.join(tempDir, 'fake-euphony');
+fs.mkdirSync(path.join(fakeEuphonyDir, 'node_modules'), { recursive: true });
+fs.writeFileSync(path.join(fakeEuphonyDir, 'package.json'), '{"scripts":{}}\n');
+
+const stageOutput = execFileSync(process.execPath, [script, 'stage', cliFixture], {
+  cwd: rootDir,
+  env: {
+    ...process.env,
+    EUPHONY_DIR: fakeEuphonyDir,
+    EUPHONY_PORT: '37123'
+  },
+  encoding: 'utf8'
+});
+assert(
+  stageOutput.includes(
+    'Open: http://127.0.0.1:37123/?path=http://127.0.0.1:37123/local-codebuddy/latest.jsonl&no-cache=true'
+  ),
+  'CodeBuddy stage command should use the same port for page and JSONL URLs.'
+);
+assert(
+  fs.existsSync(path.join(fakeEuphonyDir, 'public', 'local-codebuddy', 'latest.jsonl')),
+  'CodeBuddy stage command did not write the staged JSONL.'
+);
+
 console.log('CodeBuddy conversion fixtures passed.');

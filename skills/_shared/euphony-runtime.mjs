@@ -211,12 +211,18 @@ export function createEuphonyRuntime({
   euphonyRepo,
   host,
   port,
+  portCandidates = [],
   runDir,
   maxLines,
   frontendLimitComment
 }) {
-  const baseUrl = `http://${host}:${port}/`;
+  const initialPort = Number(port);
+  let activePort = initialPort;
+  const candidatePorts = [...new Set([initialPort, ...portCandidates].map(Number))]
+    .filter(candidate => Number.isInteger(candidate) && candidate > 0);
+  const baseUrl = () => `http://${host}:${activePort}/`;
   const pidFile = path.join(runDir, 'vite.pid');
+  const portFile = path.join(runDir, 'vite.port');
   const logFile = path.join(runDir, 'vite.log');
   const commentLines = Array.isArray(frontendLimitComment)
     ? frontendLimitComment
@@ -256,6 +262,25 @@ Remove it or set EUPHONY_DIR to another path.`);
     return Number(text);
   }
 
+  function readTrackedPort() {
+    if (!fs.existsSync(portFile)) return null;
+    const text = fs.readFileSync(portFile, 'utf8').trim();
+    if (!/^\d+$/.test(text)) return null;
+    const trackedPort = Number(text);
+    return trackedPort > 0 ? trackedPort : null;
+  }
+
+  function writeTrackedProcess(pid, trackedPort = activePort) {
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(pidFile, `${pid}\n`);
+    fs.writeFileSync(portFile, `${trackedPort}\n`);
+  }
+
+  function clearTrackedProcess() {
+    fs.rmSync(pidFile, { force: true });
+    fs.rmSync(portFile, { force: true });
+  }
+
   function pidExists(pid) {
     if (!pid) return false;
     try {
@@ -266,21 +291,36 @@ Remove it or set EUPHONY_DIR to another path.`);
     }
   }
 
-  function trackedPid() {
-    const pid = readTrackedPid();
-    return pidExists(pid) ? pid : null;
-  }
-
-  function legacyCheckoutPids() {
+  function listeningPids(candidatePort = activePort) {
     if (isWindows || !commandExists('lsof')) return [];
     try {
-      const output = execFileSync('lsof', ['-nP', `-tiTCP:${port}`, '-sTCP:LISTEN'], {
+      const output = execFileSync('lsof', ['-nP', `-tiTCP:${candidatePort}`, '-sTCP:LISTEN'], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore']
       });
-      return output
-        .split(/\r?\n/)
-        .filter(Boolean)
+      return output.split(/\r?\n/).filter(Boolean).map(Number);
+    } catch {
+      return [];
+    }
+  }
+
+  function pidListensOnPort(pid, candidatePort = activePort) {
+    if (!pid) return false;
+    if (isWindows || !commandExists('lsof')) {
+      return readTrackedPort() === candidatePort;
+    }
+    return listeningPids(candidatePort).includes(pid);
+  }
+
+  function trackedPid(candidatePort = activePort) {
+    const pid = readTrackedPid();
+    return pidExists(pid) && pidListensOnPort(pid, candidatePort) ? pid : null;
+  }
+
+  function legacyCheckoutPids(candidatePort = activePort) {
+    if (isWindows || !commandExists('lsof')) return [];
+    try {
+      return listeningPids(candidatePort)
         .filter(pid => {
           try {
             const cwdOutput = execFileSync('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], {
@@ -295,11 +335,17 @@ Remove it or set EUPHONY_DIR to another path.`);
           } catch {
             return false;
           }
-        })
-        .map(Number);
+        });
     } catch {
       return [];
     }
+  }
+
+  function verifiedPidForStop() {
+    const pid = readTrackedPid();
+    if (!pidExists(pid)) return null;
+    if (isWindows || !commandExists('lsof')) return null;
+    return legacyCheckoutPids(activePort).includes(pid) ? pid : null;
   }
 
   function trackedOrAdoptedPid() {
@@ -307,15 +353,23 @@ Remove it or set EUPHONY_DIR to another path.`);
     if (pid) return pid;
     const [legacyPid] = legacyCheckoutPids();
     if (!legacyPid) return null;
-    fs.mkdirSync(runDir, { recursive: true });
-    fs.writeFileSync(pidFile, `${legacyPid}\n`);
+    writeTrackedProcess(legacyPid);
     return legacyPid;
+  }
+
+  async function selectUsablePort() {
+    for (const candidatePort of candidatePorts) {
+      activePort = candidatePort;
+      if (trackedOrAdoptedPid()) return;
+      if (!(await requestHead(baseUrl()))) return;
+    }
+    activePort = initialPort;
   }
 
   function startViteBackground() {
     fs.mkdirSync(runDir, { recursive: true });
     const logFd = fs.openSync(logFile, 'a');
-    const child = spawnPnpm(['exec', 'vite', '--host', host, '--port', String(port), '--strictPort'], {
+    const child = spawnPnpm(['exec', 'vite', '--host', host, '--port', String(activePort), '--strictPort'], {
       cwd: euphonyDir,
       detached: true,
       env: {
@@ -325,38 +379,40 @@ Remove it or set EUPHONY_DIR to another path.`);
       stdio: ['ignore', logFd, logFd]
     });
     child.unref();
-    fs.writeFileSync(pidFile, `${child.pid}\n`);
+    writeTrackedProcess(child.pid);
   }
 
   async function up() {
+    await selectUsablePort();
     const existingPid = trackedOrAdoptedPid();
-    if (await requestHead(baseUrl)) {
+    if (await requestHead(baseUrl())) {
       if (existingPid) {
         ensureEuphonyDir();
-        console.log(`Euphony responds at ${baseUrl}`);
+        console.log(`Euphony responds at ${baseUrl()}`);
         console.log(`PID: ${existingPid}`);
         return;
       }
-      fail(`Port ${port} responds at ${baseUrl}, but this script has no live pid file for it.
+      fail(`Port ${activePort} responds at ${baseUrl()}, but this script has no live pid file for it.
 Stop the other server or set EUPHONY_PORT to another value.`);
     }
     ensureEuphonyDir();
     if (!existingPid) startViteBackground();
-    console.log(`Starting Euphony at ${baseUrl}`);
+    console.log(`Starting Euphony at ${baseUrl()}`);
     console.log(`Log: ${logFile}`);
     for (let i = 0; i < 300; i += 1) {
-      if (await requestHead(baseUrl)) {
-        console.log(`Euphony is ready at ${baseUrl}`);
+      if (await requestHead(baseUrl())) {
+        console.log(`Euphony is ready at ${baseUrl()}`);
         return;
       }
       await new Promise(resolve => setTimeout(resolve, 200));
     }
-    fail(`Euphony did not respond at ${baseUrl}. Check ${logFile}`);
+    fail(`Euphony did not respond at ${baseUrl()}. Check ${logFile}`);
   }
 
   async function startForeground() {
+    await selectUsablePort();
     ensureEuphonyDir();
-    const child = spawnPnpm(['exec', 'vite', '--host', host, '--port', String(port), '--strictPort'], {
+    const child = spawnPnpm(['exec', 'vite', '--host', host, '--port', String(activePort), '--strictPort'], {
       cwd: euphonyDir,
       env: {
         VITE_EUPHONY_FRONTEND_ONLY: 'true',
@@ -376,9 +432,11 @@ Stop the other server or set EUPHONY_PORT to another value.`);
   }
 
   function stop() {
-    const pid = trackedOrAdoptedPid();
+    const trackedPort = readTrackedPort();
+    if (trackedPort) activePort = trackedPort;
+    const pid = verifiedPidForStop() || legacyCheckoutPids()[0] || null;
     if (!pid) {
-      if (fs.existsSync(pidFile)) fs.rmSync(pidFile, { force: true });
+      clearTrackedProcess();
       console.log('No tracked Euphony process found.');
       return;
     }
@@ -388,22 +446,23 @@ Stop the other server or set EUPHONY_PORT to another value.`);
     } catch (error) {
       console.log(`Could not stop PID ${pid}: ${error.message}`);
     }
-    fs.rmSync(pidFile, { force: true });
+    clearTrackedProcess();
   }
 
   async function status() {
+    await selectUsablePort();
     const pid = trackedOrAdoptedPid();
-    if (await requestHead(baseUrl)) {
+    if (await requestHead(baseUrl())) {
       if (pid) {
-        console.log(`Euphony responds at ${baseUrl}`);
+        console.log(`Euphony responds at ${baseUrl()}`);
         console.log(`PID: ${pid}`);
         return;
       }
-      console.log(`Port ${port} responds at ${baseUrl}, but this script has no live pid file for it.`);
+      console.log(`Port ${activePort} responds at ${baseUrl()}, but this script has no live pid file for it.`);
       process.exitCode = 1;
       return;
     }
-    console.log(`Euphony is not responding at ${baseUrl}`);
+    console.log(`Euphony is not responding at ${baseUrl()}`);
     if (pid) console.log(`Tracked PID exists but HTTP is not ready: ${pid}`);
     process.exitCode = 1;
   }
@@ -419,11 +478,14 @@ Stop the other server or set EUPHONY_PORT to another value.`);
   }
 
   return {
-    baseUrl,
+    get baseUrl() {
+      return baseUrl();
+    },
     ensureEuphonyDir,
     openBrowser,
     requestHead,
     requestTextPrefix,
+    selectUsablePort,
     startForeground,
     status,
     stop,

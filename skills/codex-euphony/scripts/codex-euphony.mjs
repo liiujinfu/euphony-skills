@@ -33,7 +33,6 @@ const runtime = createEuphonyRuntime({
     'the default high while allowing local deployments to lower it.'
   ]
 });
-const { baseUrl } = runtime;
 
 function usage() {
   console.log(`Usage: ${path.basename(process.argv[1])} <command> [session-jsonl]
@@ -207,7 +206,7 @@ function stageSession(input) {
     writeStagedCopy(source);
   }
   fs.writeFileSync(stagedSource, `${source}\n`);
-  const url = `${baseUrl}?path=${baseUrl}local-codex/latest.jsonl&no-cache=true`;
+  const url = `${runtime.baseUrl}?path=${runtime.baseUrl}local-codex/latest.jsonl&no-cache=true`;
   console.log(`Staged: ${source}`);
   if (eventLimit > 0) console.log(`Event limit: latest ${eventLimit} events plus session metadata`);
   console.log(`Open: ${url}`);

@@ -164,6 +164,7 @@ CodeBuddy：
 - 如果缓存被删除，下一次需要 Euphony 时会自动重建。
 - 本地 Euphony 服务绑定到 `127.0.0.1`。
 - 默认端口是 `3000`。
+- CodeBuddy skill 在未显式设置 `EUPHONY_PORT` 时，如果默认端口已经被另一个 checkout 占用，会自动尝试 `3001` 到 `3003`，并保证页面 URL 和 staged JSONL URL 使用同一个端口。
 - Codex staging 在 macOS/Linux 默认使用软链接，在 Windows 默认复制文件。设置 `EUPHONY_STAGE_MODE=copy` 可以在所有平台强制使用快照复制。
 - 后台服务通过 Euphony cache 下的 pid 文件跟踪，所以 `stop` 只会停止同一个 skill 脚本启动的服务。
 

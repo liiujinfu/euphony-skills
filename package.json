@@ -1,6 +1,6 @@
 {
   "name": "@jefferylau/euphony-skills",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Install Euphony viewer skills for Codex and CodeBuddy.",
   "type": "module",
   "license": "MIT",

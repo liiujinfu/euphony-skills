@@ -164,6 +164,7 @@ At runtime:
 - If the cache is deleted, the skill recreates it on the next command that needs Euphony.
 - The local Euphony server binds to `127.0.0.1`.
 - The default port is `3000`.
+- When `EUPHONY_PORT` is not set, the CodeBuddy skill automatically tries `3001` through `3003` if the default port is already used by another checkout, and keeps the page URL and staged JSONL URL on the same selected port.
 - Codex staging uses a symlink on macOS/Linux and a copy on Windows by default. Set `EUPHONY_STAGE_MODE=copy` to force snapshot staging everywhere.
 - Background servers are tracked with a pid file under the Euphony cache, so `stop` only controls servers started by the same skill script.
 
